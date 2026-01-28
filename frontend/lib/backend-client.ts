@@ -40,10 +40,35 @@ export async function fetchAgentRunStatus(runId: string) {
     return response.json();
 }
 
-export async function fetchAgentRunLogs(runId: string) {
-    const response = await fetch(`${BACKEND_URL}/api/agents/runs/${runId}/logs`);
+const response = await fetch(`${BACKEND_URL}/api/agents/runs/${runId}/logs`);
+if (!response.ok) {
+    throw new Error(`Backend run logs fetch failed: ${response.status}`);
+}
+return response.json();
+}
+
+// Portfolio
+export async function startOptimization(amount: number, currency: string) {
+    const response = await fetch(`${BACKEND_URL}/api/portfolio/optimize`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ amount, currency }),
+    });
+
     if (!response.ok) {
-        throw new Error(`Backend run logs fetch failed: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`Backend optimization start failed: ${errorText}`);
+    }
+
+    return response.json();
+}
+
+export async function fetchOptimizationStatus(jobId: string) {
+    const response = await fetch(`${BACKEND_URL}/api/portfolio/optimize/${jobId}`);
+    if (!response.ok) {
+        throw new Error(`Backend optimization status fetch failed: ${response.status}`);
     }
     return response.json();
 }

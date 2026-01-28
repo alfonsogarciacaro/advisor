@@ -41,8 +41,20 @@ class HistoryService:
                         if last_updated.tzinfo is None:
                             last_updated = last_updated.replace(tzinfo=datetime.timezone.utc)
                         if datetime.datetime.now(datetime.timezone.utc) - last_updated < datetime.timedelta(hours=self.ttl_hours):
-                            results[ticker] = cached_data.get("data")
-                            continue
+                            data = cached_data.get("data")
+                            # Verify data integrity (check first item date)
+                            if data and isinstance(data, list) and len(data) > 0:
+                                first_date = data[0].get("date")
+                                # If date looks like a Series string or invalid, invalidate cache
+                                if isinstance(first_date, str) and ("Price" in first_date or "Name:" in first_date):
+                                    # Corrupted cache
+                                    pass
+                                else:
+                                    results[ticker] = data
+                                    continue
+                            elif data == []:
+                                results[ticker] = []
+                                continue
                     except (ValueError, TypeError):
                         # Invalid timestamp format, fetch fresh data
                         pass
@@ -95,8 +107,8 @@ class HistoryService:
                 for _, row in df_reset.iterrows():
                     date_val = row.get(date_col)
                     
-                    # Ensure date_val is a scalar and a valid datetime-like object
-                    if isinstance(date_val, (pd.Series, pd.DataFrame)):
+                    # STRICT Validation: Ensure date_val is scalar and valid
+                    if isinstance(date_val, (pd.Series, pd.DataFrame, list, tuple)):
                         continue
                     
                     if pd.isna(date_val):
@@ -107,19 +119,28 @@ class HistoryService:
                         if hasattr(date_val, 'isoformat'):
                             date_str = date_val.isoformat()
                         else:
-                            # Try to parse and then format to be sure
-                            date_str = pd.to_datetime(date_val).isoformat()
+                            # Parse string or other scalar
+                            ts = pd.to_datetime(date_val)
+                            if pd.isna(ts): 
+                                continue
+                            date_str = ts.isoformat()
 
-                        # Basic validation: ensure it's not a generic string like "Price"
-                        if " " in date_str and "T" not in date_str: # Likely not ISO
-                             continue
+                        # Extra check: If string implies it's a Series print (contains "Price" or newlines)
+                        if isinstance(date_str, str):
+                            if "Price" in date_str or "\n" in date_str or "Name:" in date_str:
+                                continue
+                            # Basic ISO check
+                            if "T" not in date_str and len(date_str) < 10:
+                                continue
 
                         def sanitize(val):
                             if pd.isna(val):
                                 return None
                             try:
                                 if isinstance(val, (pd.Series, pd.DataFrame)):
-                                    val = val.iloc[0] if not val.empty else None
+                                    # If duplicate columns exist, handle gracefully by taking first (if all same) or None
+                                    if hasattr(val, 'iloc'):
+                                        val = val.iloc[0]
                                 return float(val) if val is not None else None
                             except (ValueError, TypeError):
                                 return None
@@ -241,8 +262,26 @@ class HistoryService:
                     results[ticker] = []
                     continue
 
+                start_date = None
+                if period == "1y":
+                    start_date = pd.Timestamp.now(datetime.timezone.utc) - pd.Timedelta(days=365)
+                elif period == "2y":
+                    start_date = pd.Timestamp.now(datetime.timezone.utc) - pd.Timedelta(days=365*2)
+                elif period == "5y":
+                    start_date = pd.Timestamp.now(datetime.timezone.utc) - pd.Timedelta(days=365*5)
+                # Default to all if not specified or "max"
+
                 dividend_data = []
                 for date, amount in dividends.items():
+                    # date from yfinance is usually timezone aware
+                    if start_date:
+                        # Ensure comparison is valid
+                        div_date = date
+                        if div_date.tzinfo is None:
+                             div_date = div_date.replace(tzinfo=datetime.timezone.utc)
+                        if div_date < start_date:
+                            continue
+
                     dividend_data.append({
                         "date": date.isoformat(),
                         "amount": float(amount)

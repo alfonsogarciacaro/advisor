@@ -62,3 +62,13 @@ class ConfigService:
         """Get list of fundamental fields to fetch."""
         config = self._load_config()
         return config.get('fundamental_fields', [])
+
+    def get_commission_settings(self) -> Dict[str, Any]:
+        """Get commission settings."""
+        config = self._load_config()
+        return config.get('commission_settings', {
+            "type": "flat_per_trade",
+            "value": 0.0,
+            "min_commission": 0.0,
+            "currency": "USD"
+        })

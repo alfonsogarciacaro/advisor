@@ -105,3 +105,12 @@ def get_agent_service(
     service.register_agent("research", ConfiguredResearchAgent)
 
     return service
+
+@lru_cache()
+def get_portfolio_optimizer_service(
+    history_service: HistoryService = Depends(get_history_service),
+    config_service: ConfigService = Depends(get_config_service),
+    storage_service: StorageService = Depends(get_storage_service)
+) -> Any:
+    from app.services.portfolio_optimizer import PortfolioOptimizerService
+    return PortfolioOptimizerService(history_service, config_service, storage_service)

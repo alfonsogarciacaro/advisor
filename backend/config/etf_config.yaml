@@ -103,3 +103,11 @@ fundamental_fields:
   - "52WeekChange"      # 52-week price change
   - "enterpriseValue"   # Enterprise value
   - "profitMargins"     # Profit margin
+
+# Commission settings for portfolio optimization
+commission_settings:
+  type: "flat_per_trade" # Options: "flat_per_trade", "percentage", "tier_based"
+  value: 1.0            # $1.00 per trade (example)
+  min_commission: 0.0    # Minimum commission
+  currency: "USD"        # Commission currency
+
