@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 from app.services.agent_service import AgentService
-from app.core.dependencies import get_agent_service
+from app.core.dependencies import get_agent_service, get_logger
+from app.services.logger_service import LoggerService
 
 router = APIRouter()
 
@@ -18,7 +19,8 @@ async def run_agent(
     agent_name: str, 
     request: AgentRunRequest,
     background_tasks: BackgroundTasks,
-    agent_service: AgentService = Depends(get_agent_service)
+    agent_service: AgentService = Depends(get_agent_service),
+    logger: LoggerService = Depends(get_logger)
 ):
     try:
         run_id = await agent_service.create_run(agent_name, request.input)
@@ -39,7 +41,8 @@ async def run_agent(
 @router.get("/runs/{run_id}")
 async def get_run_status(
     run_id: str,
-    agent_service: AgentService = Depends(get_agent_service)
+    agent_service: AgentService = Depends(get_agent_service),
+    logger: LoggerService = Depends(get_logger)
 ):
     run = await agent_service.get_run(run_id)
     if not run:

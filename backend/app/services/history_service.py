@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 from .storage_service import StorageService
+from .logger_service import LoggerService
 from typing import List, Dict, Any, Optional
 
 # Import pandas-ta for technical indicators
@@ -13,8 +14,9 @@ except ImportError:
     PANDAS_TA_AVAILABLE = False
 
 class HistoryService:
-    def __init__(self, storage: StorageService, ttl_hours: int = 24):
+    def __init__(self, storage: StorageService, logger: LoggerService, ttl_hours: int = 24):
         self.storage = storage
+        self.logger = logger
         self.ttl_hours = ttl_hours
         self.collection = "cache"
         self.doc_id_prefix = "history_"
@@ -50,6 +52,7 @@ class HistoryService:
                                     # Corrupted cache
                                     pass
                                 else:
+                                    self.logger.debug(f"Cache hit for {ticker} ({period}, {interval})")
                                     results[ticker] = data
                                     continue
                             elif data == []:
@@ -63,6 +66,7 @@ class HistoryService:
 
         # 2. Fetch missing data from yfinance
         if tickers_to_fetch:
+            self.logger.info(f"Fetching data from yfinance for {len(tickers_to_fetch)} tickers: {tickers_to_fetch}")
             data = yf.download(tickers_to_fetch, period=period, interval=interval, group_by='ticker', auto_adjust=True, threads=True)
             
             for ticker in tickers_to_fetch:
@@ -161,12 +165,15 @@ class HistoryService:
 
                 # Save to cache
                 if ticker_data:
+                    self.logger.debug(f"Successfully fetched and cached {len(ticker_data)} points for {ticker}")
                     cache_entry = {
                         "data": ticker_data,
                         "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
                     }
                     doc_id = f"{self.doc_id_prefix}{ticker}_{period}_{interval}"
                     await self.storage.save(self.collection, doc_id, cache_entry)
+                else:
+                    self.logger.warning(f"No data returned from yfinance for {ticker}")
 
         return results
 
@@ -298,7 +305,7 @@ class HistoryService:
                 await self.storage.save(self.collection, doc_id, cache_entry)
 
             except Exception as e:
-                # Log error if logger available
+                self.logger.error(f"Failed to fetch dividends for {ticker}: {e}")
                 results[ticker] = []
 
         return results

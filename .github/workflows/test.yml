@@ -48,6 +48,14 @@ jobs:
         echo "Backend starting..."
         sleep 10 # Give it more time
 
+    - name: Run Backend Tests
+      working-directory: ./backend
+      env:
+        FIRESTORE_EMULATOR_HOST: localhost:8080
+        GCP_PROJECT_ID: finance-advisor
+      run: |
+        uv run pytest tests/test_endpoints.py
+
     # 3. Set up Frontend & Run Tests
     - name: Set up Node.js
       uses: actions/setup-node@v4

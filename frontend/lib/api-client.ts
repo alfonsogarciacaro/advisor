@@ -122,6 +122,7 @@ export interface OptimizationResult {
         expected_portfolio_value?: number | null;
         expected_return?: number | null;
         annual_volatility?: number | null;
+        trajectory?: Array<{ date: string; value: number }>;
     }>;
     llm_report?: string;
     error?: string;
@@ -150,6 +151,20 @@ export async function getOptimizationStatus(jobId: string): Promise<Optimization
     if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Failed to get optimization status');
+    }
+
+    return response.json();
+}
+
+export async function clearOptimizationCache(jobId?: string): Promise<{ message: string; jobs_cleared: number }> {
+    const url = jobId ? `/api/portfolio/optimize/cache?job_id=${jobId}` : '/api/portfolio/optimize/cache';
+    const response = await fetch(url, {
+        method: 'DELETE',
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to clear cache');
     }
 
     return response.json();

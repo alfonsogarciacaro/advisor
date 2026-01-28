@@ -8,6 +8,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from app.services.history_service import HistoryService
 from app.services.config_service import ConfigService
 from app.services.storage_service import StorageService
+from app.services.logger_service import LoggerService
 from app.models.portfolio import OptimizationResult, PortfolioAsset, EfficientFrontierPoint, ScenarioForecast
 from app.core.utils import sanitize_numpy
 
@@ -17,12 +18,14 @@ class PortfolioOptimizerService:
         history_service: HistoryService,
         config_service: ConfigService,
         storage_service: StorageService,
+        logger: LoggerService,
         forecasting_engine: Optional[Any] = None,
         llm_service: Optional[Any] = None
     ):
         self.history_service = history_service
         self.config_service = config_service
         self.storage_service = storage_service
+        self.logger = logger
         self.forecasting_engine = forecasting_engine
         self.llm_service = llm_service
         self.collection = "optimization_jobs"
@@ -41,6 +44,8 @@ class PortfolioOptimizerService:
         
         await self.storage_service.save(self.collection, job_id, sanitize_numpy(initial_job_state.model_dump()))
         
+        self.logger.info(f"Queuing optimization job {job_id} for amount {amount} {currency}")
+        
         # Fire and forget task
         asyncio.create_task(self._run_optimization(job_id, amount, currency, excluded_tickers))
         
@@ -48,6 +53,7 @@ class PortfolioOptimizerService:
 
     async def _run_optimization(self, job_id: str, amount: float, currency: str, excluded_tickers: List[str]):
         try:
+            self.logger.info(f"Starting optimization job {job_id}")
             # Update status
             await self._update_job_status(job_id, "fetching_data")
 
@@ -113,8 +119,8 @@ class PortfolioOptimizerService:
                     forecast_result = await self.forecasting_engine.run_forecast_suite(
                         tickers=valid_tickers,
                         horizon="6mo",  # Use 6-month forecast
-                        models=["gbm", "arima"],
-                        simulations=500,  # Lower sims for portfolio optimization speed
+                        models=["gbm"], # disable "arima" for now to speed up testing
+                        simulations=50,  # Lower sims for portfolio optimization speed
                         use_cache=True  # Use cached forecasts if available
                     )
 
@@ -140,7 +146,7 @@ class PortfolioOptimizerService:
 
                 except Exception as e:
                     # Fall back to historical returns if forecasting fails
-                    print(f"Forecasting failed, using historical returns: {e}")
+                    self.logger.warning(f"Forecasting failed for job {job_id}, using historical returns: {e}")
                     expected_annual_returns = self._calculate_historical_returns(
                         daily_returns, prices_df, dividends_total, valid_tickers, expense_ratios
                     )
@@ -256,7 +262,7 @@ class PortfolioOptimizerService:
             await self.storage_service.save(self.collection, job_id, sanitize_numpy(final_job_state.model_dump()))
 
         except Exception as e:
-            print(f"Optimization failed: {e}")
+            self.logger.error(f"Optimization failed for job {job_id}: {e}")
             # Save error state
             error_state = {
                 "job_id": job_id,
@@ -408,26 +414,42 @@ class PortfolioOptimizerService:
                 base_variance += optimal_weights[t1] * optimal_weights[t2] * cov_matrix.iloc[i, j]
         base_volatility = np.sqrt(base_variance)
 
+        def generate_trajectory(amount: float, annual_ret: float, months: int = 60) -> List[Dict[str, Any]]:
+            traj = []
+            start_date = datetime.datetime.now(datetime.timezone.utc)
+            for i in range(months + 1):
+                # Approximation of months for display purposes
+                date = start_date + datetime.timedelta(days=30*i)
+                val = amount * ((1 + annual_ret) ** (i / 12))
+                traj.append({
+                    "date": date.isoformat(),
+                    "value": val
+                })
+            return traj
+
+        # Base Case
         scenarios.append(ScenarioForecast(
             name="Base Case",
             probability=0.60,
             description="Expected market conditions with moderate growth and volatility.",
             expected_portfolio_value=investable_amount * (1 + base_return),
             expected_return=base_return,
-            annual_volatility=base_volatility
+            annual_volatility=base_volatility,
+            trajectory=generate_trajectory(investable_amount, base_return)
         ))
 
         # Bull case - optimistic scenario
         bull_return = base_return * 1.5
         bull_volatility = base_volatility * 0.8
-
+        
         scenarios.append(ScenarioForecast(
             name="Bull Case",
             probability=0.20,
             description="Optimistic scenario with strong market performance and lower volatility.",
             expected_portfolio_value=investable_amount * (1 + bull_return),
             expected_return=bull_return,
-            annual_volatility=bull_volatility
+            annual_volatility=bull_volatility,
+            trajectory=generate_trajectory(investable_amount, bull_return)
         ))
 
         # Bear case - pessimistic scenario
@@ -440,7 +462,8 @@ class PortfolioOptimizerService:
             description="Pessimistic scenario with market downturns and elevated volatility.",
             expected_portfolio_value=investable_amount * (1 + bear_return),
             expected_return=bear_return,
-            annual_volatility=bear_volatility
+            annual_volatility=bear_volatility,
+            trajectory=generate_trajectory(investable_amount, bear_return)
         ))
 
         return scenarios
@@ -504,5 +527,5 @@ Keep the tone professional yet accessible. Use markdown formatting for readabili
             report = await self.llm_service.generate_response(prompt, use_cache=True)
             return report
         except Exception as e:
-            print(f"Failed to generate LLM report: {e}")
+            self.logger.error(f"Failed to generate LLM report for job {job_id}: {e}")
             return None

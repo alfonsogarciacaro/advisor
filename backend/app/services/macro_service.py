@@ -15,6 +15,7 @@ except ImportError:
 # Import yfinance for market data
 import yfinance as yf
 import pandas as pd
+from app.services.logger_service import LoggerService
 
 
 class MacroService:
@@ -44,15 +45,17 @@ class MacroService:
         }
     }
 
-    def __init__(self, storage_service, fred_api_key: Optional[str] = None):
+    def __init__(self, storage_service, logger: LoggerService, fred_api_key: Optional[str] = None):
         """
         Initialize macro service.
 
         Args:
             storage_service: Storage service for caching
+            logger: Service for logging
             fred_api_key: FRED API key (uses env var if None)
         """
         self.storage = storage_service
+        self.logger = logger
         self.collection = "cache"
         self.doc_id_prefix = "macro_"
         self.cache_ttl_hours = 6
@@ -64,8 +67,8 @@ class MacroService:
         if FRED_AVAILABLE and self.fred_api_key:
             try:
                 self.fred = Fred(api_key=self.fred_api_key)
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.error(f"Failed to initialize FRED client: {e}")
 
     async def get_macro_indicators(
         self,
@@ -95,6 +98,7 @@ class MacroService:
                     if last_updated.tzinfo is None:
                         last_updated = last_updated.replace(tzinfo=datetime.timezone.utc)
                     if datetime.now(datetime.timezone.utc) - last_updated < timedelta(hours=self.cache_ttl_hours):
+                        self.logger.debug(f"Cache hit for macro indicators: {market}")
                         return cached.get("data", {})
                 except (ValueError, TypeError):
                     pass

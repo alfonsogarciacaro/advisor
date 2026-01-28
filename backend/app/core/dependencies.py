@@ -29,18 +29,20 @@ def get_storage_service() -> StorageService:
 
 @lru_cache()
 def get_news_service() -> NewsService:
+    logger = get_logger()
     if os.getenv("ALPHA_VANTAGE_API_KEY"):
         provider = AlphaVantageProvider()
     else:
         provider = MockNewsProvider()
     storage = get_storage_service()
     ttl = int(os.getenv("NEWS_TTL_HOURS", "12"))
-    return NewsService(provider=provider, storage=storage, ttl_hours=ttl)
+    return NewsService(provider=provider, storage=storage, logger=logger, ttl_hours=ttl)
 
 @lru_cache()
 def get_history_service() -> HistoryService:
     storage = get_storage_service()
-    return HistoryService(storage)
+    logger = get_logger()
+    return HistoryService(storage, logger)
 
 @lru_cache()
 def get_config_service() -> ConfigService:
@@ -59,13 +61,15 @@ def get_forecasting_engine() -> Any:
     history_service = get_history_service()
     config_service = get_config_service()
     storage_service = get_storage_service()
-    return ForecastingEngine(history_service, config_service, storage_service)
+    logger = get_logger()
+    return ForecastingEngine(history_service, logger, config_service, storage_service)
 
 @lru_cache()
 def get_macro_service() -> Any:
     from app.services.macro_service import MacroService
     storage = get_storage_service()
-    return MacroService(storage)
+    logger = get_logger()
+    return MacroService(storage, logger)
 
 @lru_cache()
 def get_risk_calculator() -> Any:
@@ -117,4 +121,5 @@ def get_portfolio_optimizer_service(
     llm_service: Any = Depends(get_llm_service)
 ) -> Any:
     from app.services.portfolio_optimizer import PortfolioOptimizerService
-    return PortfolioOptimizerService(history_service, config_service, storage_service, forecasting_engine, llm_service)
+    logger = get_logger()
+    return PortfolioOptimizerService(history_service, config_service, storage_service, logger, forecasting_engine, llm_service)

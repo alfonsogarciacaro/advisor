@@ -31,6 +31,7 @@ class ScenarioForecast(BaseModel):
     expected_portfolio_value: Optional[float] = None
     expected_return: Optional[float] = None
     annual_volatility: Optional[float] = None
+    trajectory: Optional[List[Dict[str, Any]]] = None
 
 class OptimizationResult(BaseModel):
     job_id: str

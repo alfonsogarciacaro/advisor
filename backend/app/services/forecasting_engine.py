@@ -9,6 +9,7 @@ from app.services.forecasting_models.base_model import BaseModel
 from app.services.forecasting_models.gbm_model import GBMModel
 from app.services.forecasting_models.arima_model import ARIMAModel
 from app.services.config_service import ConfigService
+from app.services.logger_service import LoggerService
 
 
 class ForecastingEngine:
@@ -22,16 +23,18 @@ class ForecastingEngine:
     - Configuration-driven behavior
     """
 
-    def __init__(self, history_service, config_service: Optional[ConfigService] = None, storage_service=None):
+    def __init__(self, history_service, logger: LoggerService, config_service: Optional[ConfigService] = None, storage_service=None):
         """
         Initialize forecasting engine.
 
         Args:
             history_service: Service for fetching historical price data
+            logger: Service for logging
             config_service: Optional configuration service
             storage_service: Optional storage service for caching forecasts
         """
         self.history_service = history_service
+        self.logger = logger
         self.config_service = config_service
         self.storage_service = storage_service
         self.models: Dict[str, BaseModel] = {}
@@ -144,6 +147,7 @@ class ForecastingEngine:
                     age = datetime.datetime.now(datetime.timezone.utc) - created_at
 
                     if age < datetime.timedelta(hours=ttl_hours):
+                        self.logger.info(f"Using cached forecast for key: {cache_key}")
                         return cached.get("data")
                 except (ValueError, TypeError):
                     pass
@@ -214,6 +218,7 @@ class ForecastingEngine:
         price_history = await self._fetch_price_history(tickers)
 
         if not price_history:
+            self.logger.error(f"No price history available for tickers: {tickers}")
             return {"error": "No price history available for tickers"}
 
         # Run models in parallel
@@ -227,6 +232,7 @@ class ForecastingEngine:
         )
 
         # Create ensemble
+        self.logger.info(f"Creating ensemble forecast for {len(tickers)} tickers")
         ensemble = self._create_ensemble(
             model_results,
             tickers,
@@ -318,6 +324,7 @@ class ForecastingEngine:
             model = self.models[model_name]
 
             # Create async task for each model
+            self.logger.debug(f"Starting model: {model_name} for {len(tickers)} tickers")
             task = self._run_model_async(
                 model,
                 model_name,
@@ -496,10 +503,10 @@ class ForecastingEngine:
             try:
                 # Use history service to fetch data
                 data = await self.history_service.get_history(ticker, period=period)
-                if data and not data.empty:
+                if data is not None and not data.empty:
                     history[ticker] = data
             except Exception as e:
-                # Log error but continue with other tickers
+                self.logger.error(f"Failed to fetch history for {ticker}: {e}")
                 pass
 
         return history
