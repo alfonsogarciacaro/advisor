@@ -1,0 +1,92 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # 1. Start Emulators using Docker Compose
+    - name: Start Emulators
+      run: |
+        docker compose up -d firestore-emulator pubsub-emulator
+        echo "Waiting for Firestore emulator to be ready..."
+        timeout 90s bash -c 'until docker compose logs firestore-emulator 2>&1 | grep -q "Dev App Server is now running"; do sleep 2; done'
+        echo "Waiting for PubSub emulator to be ready..."
+        timeout 90s bash -c 'until docker compose logs pubsub-emulator 2>&1 | grep -q "Server started"; do sleep 2; done'
+        echo "Emulators are fully initialized!"
+        docker compose ps
+        echo "--- Firestore Logs ---"
+        docker compose logs firestore-emulator
+        echo "--- PubSub Logs ---"
+        docker compose logs pubsub-emulator
+
+    # 2. Set up Backend
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install uv
+      run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+    - name: Install Backend Dependencies
+      working-directory: ./backend
+      run: |
+        uv sync
+
+    - name: Start Backend
+      working-directory: ./backend
+      env:
+        FIRESTORE_EMULATOR_HOST: localhost:8080
+        PUBSUB_EMULATOR_HOST: localhost:8085
+        GCP_PROJECT_ID: finance-advisor
+      run: |
+        uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
+        echo "Backend starting..."
+        sleep 10 # Give it more time
+
+    # 3. Set up Frontend & Run Tests
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install Frontend Dependencies
+      working-directory: ./frontend
+      run: npm ci
+
+    - name: Install Playwright Browsers
+      working-directory: ./frontend
+      run: npx playwright install --with-deps
+
+    - name: Run Playwright Tests
+      working-directory: ./frontend
+      run: npx playwright test
+      env:
+        CI: true
+
+    - name: Show Logs on Failure
+      if: failure()
+      run: |
+        echo "--- Backend Logs ---"
+        cat backend/backend.log || true
+        echo "--- Emulator Logs ---"
+        docker compose logs
+
+    - name: Upload Playwright Report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: playwright-report
+        path: frontend/playwright-report/
+        retention-days: 30

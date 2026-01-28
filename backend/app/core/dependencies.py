@@ -1,6 +1,7 @@
 import os
 from functools import lru_cache
 from app.services.news.alpha_vantage_provider import AlphaVantageProvider
+from app.services.news.mock_news_provider import MockNewsProvider
 from app.services.news_service import NewsService
 from app.services.logger_service import LoggerService
 from app.infrastructure.logging.std_logger import StdLogger
@@ -29,7 +30,10 @@ def get_pubsub_service() -> PubSubService:
 
 @lru_cache()
 def get_news_service() -> NewsService:
-    provider = AlphaVantageProvider()
+    if os.getenv("ALPHA_VANTAGE_API_KEY"):
+        provider = AlphaVantageProvider()
+    else:
+        provider = MockNewsProvider()
     storage = get_storage_service()
     ttl = int(os.getenv("NEWS_TTL_HOURS", "12"))
     return NewsService(provider=provider, storage=storage, ttl_hours=ttl)
