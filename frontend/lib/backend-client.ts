@@ -40,11 +40,12 @@ export async function fetchAgentRunStatus(runId: string) {
     return response.json();
 }
 
-const response = await fetch(`${BACKEND_URL}/api/agents/runs/${runId}/logs`);
-if (!response.ok) {
-    throw new Error(`Backend run logs fetch failed: ${response.status}`);
-}
-return response.json();
+export async function fetchAgentRunLogs(runId: string) {
+    const response = await fetch(`${BACKEND_URL}/api/agents/runs/${runId}/logs`);
+    if (!response.ok) {
+        throw new Error(`Backend run logs fetch failed: ${response.status}`);
+    }
+    return response.json();
 }
 
 // Portfolio

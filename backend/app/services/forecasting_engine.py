@@ -1,6 +1,7 @@
 """Forecasting engine with model registry and ensemble capabilities."""
 
 import asyncio
+import datetime
 from typing import Dict, Any, List, Optional
 from concurrent.futures import ThreadPoolExecutor
 
@@ -21,18 +22,21 @@ class ForecastingEngine:
     - Configuration-driven behavior
     """
 
-    def __init__(self, history_service, config_service: Optional[ConfigService] = None):
+    def __init__(self, history_service, config_service: Optional[ConfigService] = None, storage_service=None):
         """
         Initialize forecasting engine.
 
         Args:
             history_service: Service for fetching historical price data
             config_service: Optional configuration service
+            storage_service: Optional storage service for caching forecasts
         """
         self.history_service = history_service
         self.config_service = config_service
+        self.storage_service = storage_service
         self.models: Dict[str, BaseModel] = {}
         self.executor = ThreadPoolExecutor(max_workers=5)
+        self.cache_collection = "forecast_cache"
 
         # Register default models
         self._register_default_models()
@@ -94,6 +98,79 @@ class ForecastingEngine:
             },
         }
 
+    def _get_forecast_cache_ttl(self) -> int:
+        """Get forecast cache TTL in hours (default 24h)."""
+        if self.config_service:
+            try:
+                settings = self.config_service.get_data_settings()
+                return settings.get("forecast_cache_ttl_hours", 24)
+            except Exception:
+                pass
+        return 24
+
+    def _generate_cache_key(
+        self,
+        tickers: List[str],
+        horizon: str,
+        models: List[str],
+        simulations: int
+    ) -> str:
+        """Generate cache key for forecast parameters."""
+        # Sort tickers for consistent key
+        sorted_tickers = sorted(tickers)
+        models_str = ",".join(sorted(models)) if models else "default"
+        tickers_str = ",".join(sorted_tickers)
+        return f"forecast_{tickers_str}_{horizon}_{models_str}_{simulations}"
+
+    async def _get_cached_forecast(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        """Get cached forecast if available and fresh."""
+        if not self.storage_service:
+            return None
+
+        try:
+            cached = await self.storage_service.get(self.cache_collection, cache_key)
+            if not cached:
+                return None
+
+            # Check if cache is fresh
+            created_at_str = cached.get("created_at")
+            if created_at_str:
+                try:
+                    created_at = datetime.datetime.fromisoformat(created_at_str)
+                    if created_at.tzinfo is None:
+                        created_at = created_at.replace(tzinfo=datetime.timezone.utc)
+
+                    ttl_hours = self._get_forecast_cache_ttl()
+                    age = datetime.datetime.now(datetime.timezone.utc) - created_at
+
+                    if age < datetime.timedelta(hours=ttl_hours):
+                        return cached.get("data")
+                except (ValueError, TypeError):
+                    pass
+
+            return None
+        except Exception:
+            return None
+
+    async def _save_forecast_cache(
+        self,
+        cache_key: str,
+        data: Dict[str, Any]
+    ) -> None:
+        """Save forecast results to cache."""
+        if not self.storage_service:
+            return
+
+        try:
+            cache_entry = {
+                "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "data": data
+            }
+            await self.storage_service.save(self.cache_collection, cache_key, cache_entry)
+        except Exception:
+            # Fail silently - caching is optional
+            pass
+
     async def run_forecast_suite(
         self,
         tickers: List[str],
@@ -101,6 +178,7 @@ class ForecastingEngine:
         models: Optional[List[str]] = None,
         simulations: int = 1000,
         scenarios: Optional[Dict[str, Dict[str, float]]] = None,
+        use_cache: bool = True,
     ) -> Dict[str, Any]:
         """
         Run a suite of forecasting models in parallel.
@@ -111,16 +189,26 @@ class ForecastingEngine:
             models: List of model names to run (default: from config)
             simulations: Number of simulations for Monte Carlo
             scenarios: Optional scenario adjustments
+            use_cache: Whether to use cached forecasts (default: True)
 
         Returns:
             Dict with ensemble results and individual model outputs
         """
-        # Convert horizon to days
-        horizon_days = self._horizon_to_days(horizon)
-
         # Determine which models to run
         if models is None:
             models = self._get_default_models(tickers)
+
+        # Generate cache key (needed even if not using cache, for saving later)
+        cache_key = self._generate_cache_key(tickers, horizon, models, simulations)
+
+        # Check cache first
+        if use_cache:
+            cached_result = await self._get_cached_forecast(cache_key)
+            if cached_result:
+                return cached_result
+
+        # Convert horizon to days
+        horizon_days = self._horizon_to_days(horizon)
 
         # Fetch price history for all tickers
         price_history = await self._fetch_price_history(tickers)
@@ -145,13 +233,19 @@ class ForecastingEngine:
             models
         )
 
-        return {
+        result = {
             "ensemble": ensemble,
             "models": model_results,
             "horizon_days": horizon_days,
             "horizon_name": horizon,
             "tickers": tickers,
         }
+
+        # Save to cache if enabled
+        if use_cache:
+            await self._save_forecast_cache(cache_key, result)
+
+        return result
 
     async def run_specific_model(
         self,
@@ -419,3 +513,31 @@ class ForecastingEngine:
         if model_name not in self.models:
             return None
         return self.models[model_name].get_model_info()
+
+    def extract_expected_returns(self, forecast_result: Dict[str, Any]) -> Dict[str, float]:
+        """
+        Extract expected returns from forecast results for portfolio optimization.
+
+        Args:
+            forecast_result: Result from run_forecast_suite
+
+        Returns:
+            Dict of {ticker: expected_annual_return}
+        """
+        ensemble = forecast_result.get("ensemble", {})
+        expected_returns = {}
+
+        for ticker, ticker_forecast in ensemble.items():
+            # Get return metrics from ensemble forecast
+            return_metrics = ticker_forecast.get("return_metrics", {})
+            expected_return = return_metrics.get("mean_return", 0.0)
+
+            # If it's a short-term forecast (e.g., 3 months), annualize it
+            horizon_days = forecast_result.get("horizon_days", 252)
+            if horizon_days < 252:
+                # Annualize the return: (1 + r)^(365/days) - 1
+                expected_return = (1 + expected_return) ** (365 / horizon_days) - 1
+
+            expected_returns[ticker] = expected_return
+
+        return expected_returns

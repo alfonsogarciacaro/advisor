@@ -25,6 +25,7 @@ dependencies = [
     "pandas-ta>=0.3.14b",
     # Macro economic data
     "fredapi>=0.4.0",
+    "google-generativeai>=0.8.6",
 ]
 
 [project.optional-dependencies]

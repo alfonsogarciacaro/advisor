@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { FinancialNews } from "../components/financial-news";
+import PortfolioOptimizer from "../components/PortfolioOptimizer";
 
 export default function Home() {
   return (
@@ -47,12 +48,7 @@ export default function Home() {
           </div>
 
           <div className="lg:col-span-8">
-            <div className="rounded-3xl border border-zinc-100 bg-zinc-50/50 p-8 dark:border-zinc-900 dark:bg-zinc-900/30">
-              <h2 className="mb-4 text-xl font-bold">Portfolio Overview</h2>
-              <div className="flex h-64 items-center justify-center rounded-2xl bg-white dark:bg-black/40 border border-zinc-100 dark:border-zinc-900">
-                <p className="text-zinc-400 italic text-sm">Portfolio data visualization will appear here</p>
-              </div>
-            </div>
+            <PortfolioOptimizer initialAmount={10000} initialCurrency="USD" />
           </div>
 
           <div className="lg:col-span-4">

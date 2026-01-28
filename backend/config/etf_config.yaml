@@ -9,6 +9,7 @@ etfs:
     asset_class: "equity_indices"
     market: "US"
     benchmark: "S&P 500"
+    expense_ratio: 0.0009
 
   - symbol: "QQQ"
     name: "Invesco QQQ Trust"
@@ -16,6 +17,7 @@ etfs:
     asset_class: "equity_indices"
     market: "US"
     benchmark: "Nasdaq-100"
+    expense_ratio: 0.0020
 
   - symbol: "IWM"
     name: "iShares Russell 2000 ETF"
@@ -23,6 +25,7 @@ etfs:
     asset_class: "equity_indices"
     market: "US"
     benchmark: "Russell 2000"
+    expense_ratio: 0.0019
 
   # Japan Equity Indices
   - symbol: "1306.T"
@@ -31,6 +34,7 @@ etfs:
     asset_class: "equity_indices"
     market: "JP"
     benchmark: "Nikkei 225"
+    expense_ratio: 0.0010
 
   - symbol: "1321.T"
     name: "NEXT FUNDS TOPIX ETF"
@@ -38,6 +42,7 @@ etfs:
     asset_class: "equity_indices"
     market: "JP"
     benchmark: "TOPIX"
+    expense_ratio: 0.0012
 
   # US Fixed Income
   - symbol: "AGG"
@@ -46,6 +51,7 @@ etfs:
     asset_class: "fixed_income"
     market: "US"
     sub_type: "government"
+    expense_ratio: 0.0003
 
   # Japan Fixed Income
   - symbol: "2561.T"
@@ -54,6 +60,7 @@ etfs:
     asset_class: "fixed_income"
     market: "JP"
     sub_type: "government"
+    expense_ratio: 0.0005
 
   # US REITs
   - symbol: "VNQ"
@@ -61,6 +68,7 @@ etfs:
     description: "Tracks US REITs - real estate investment trusts"
     asset_class: "reits"
     market: "US"
+    expense_ratio: 0.0010
 
   # Japan REITs
   - symbol: "1343.T"
@@ -68,6 +76,7 @@ etfs:
     description: "Tracks Tokyo Stock Exchange REIT Index - Japanese real estate"
     asset_class: "reits"
     market: "JP"
+    expense_ratio: 0.0012
 
   # Commodities
   - symbol: "GLD"
@@ -76,6 +85,7 @@ etfs:
     asset_class: "commodities"
     market: "US"
     commodity: "gold"
+    expense_ratio: 0.0040
 
   - symbol: "USO"
     name: "United States Oil Fund"
@@ -83,6 +93,7 @@ etfs:
     asset_class: "commodities"
     market: "US"
     commodity: "oil"
+    expense_ratio: 0.0060
 
 # Data fetching settings
 data_settings:
@@ -90,6 +101,7 @@ data_settings:
   default_interval: "1d"    # Daily data
   cache_ttl_hours: 24       # OHLCV cache TTL
   fundamentals_ttl_hours: 168  # Fundamentals cache TTL (1 week)
+  forecast_cache_ttl_hours: 24  # Forecast cache TTL (configurable, 24h default)
 
 # Fundamental data fields to fetch
 fundamental_fields:

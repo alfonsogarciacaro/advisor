@@ -47,17 +47,19 @@ def get_config_service() -> ConfigService:
     return ConfigService()
 
 @lru_cache()
-def get_forecast_service() -> Any:
-    from app.services.forecast_service import ForecastService
-    history_service = get_history_service()
-    return ForecastService(history_service)
+def get_llm_service() -> Any:
+    from app.services.llm_service import LLMService
+    config = get_config_service()
+    storage = get_storage_service()
+    return LLMService(config_service=config, storage_service=storage)
 
 @lru_cache()
 def get_forecasting_engine() -> Any:
     from app.services.forecasting_engine import ForecastingEngine
     history_service = get_history_service()
     config_service = get_config_service()
-    return ForecastingEngine(history_service, config_service)
+    storage_service = get_storage_service()
+    return ForecastingEngine(history_service, config_service, storage_service)
 
 @lru_cache()
 def get_macro_service() -> Any:
@@ -74,7 +76,7 @@ def get_risk_calculator() -> Any:
 def get_agent_service(
     news_service: NewsService = Depends(get_news_service),
     history_service: HistoryService = Depends(get_history_service),
-    forecast_service: Any = Depends(get_forecast_service),
+    llm_service: Any = Depends(get_llm_service),
     forecasting_engine: Any = Depends(get_forecasting_engine),
     macro_service: Any = Depends(get_macro_service),
     risk_calculator: Any = Depends(get_risk_calculator),
@@ -95,7 +97,7 @@ def get_agent_service(
                 storage,
                 news_service=news_service,
                 history_service=history_service,
-                forecast_service=forecast_service,
+                llm_service=llm_service,
                 forecasting_engine=forecasting_engine,
                 macro_service=macro_service,
                 risk_calculator=risk_calculator,
@@ -110,7 +112,9 @@ def get_agent_service(
 def get_portfolio_optimizer_service(
     history_service: HistoryService = Depends(get_history_service),
     config_service: ConfigService = Depends(get_config_service),
-    storage_service: StorageService = Depends(get_storage_service)
+    storage_service: StorageService = Depends(get_storage_service),
+    forecasting_engine: Any = Depends(get_forecasting_engine),
+    llm_service: Any = Depends(get_llm_service)
 ) -> Any:
     from app.services.portfolio_optimizer import PortfolioOptimizerService
-    return PortfolioOptimizerService(history_service, config_service, storage_service)
+    return PortfolioOptimizerService(history_service, config_service, storage_service, forecasting_engine, llm_service)

@@ -4,6 +4,7 @@ from app.services.portfolio_optimizer import PortfolioOptimizerService
 from app.core.dependencies import get_portfolio_optimizer_service, get_storage_service
 from app.services.storage_service import StorageService
 from app.models.portfolio import OptimizationRequest, OptimizationResult
+from app.core.utils import sanitize_numpy
 
 router = APIRouter()
 
@@ -39,5 +40,5 @@ async def get_optimization_status(
     job_data = await storage_service.get("optimization_jobs", job_id)
     if not job_data:
         raise HTTPException(status_code=404, detail="Job not found")
-    
-    return job_data
+
+    return sanitize_numpy(job_data)

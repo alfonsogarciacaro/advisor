@@ -1,5 +1,6 @@
 from typing import Dict, Any, TypedDict, Annotated, Optional
 import operator
+import json
 from langgraph.graph import StateGraph, END
 from app.core.langgraph_base import LangGraphAgent
 from app.services.logger_service import LoggerService
@@ -12,32 +13,32 @@ class AgentState(TypedDict):
     research_results: list[str]
     market_data: Dict[str, Any]
     etf_analysis: Dict[str, Any]
-    technical_indicators: Dict[str, Any]          # NEW
-    market_regime: Dict[str, Any]                 # NEW
-    macro_indicators: Dict[str, Any]              # NEW
-    baseline_forecasts: Dict[str, Any]            # NEW
+    technical_indicators: Dict[str, Any]
+    market_regime: Dict[str, Any]
+    macro_indicators: Dict[str, Any]
+    baseline_forecasts: Dict[str, Any]
     scenarios: Dict[str, Any]
-    refined_forecasts: Dict[str, Any]             # NEW
-    risk_metrics: Dict[str, Any]                  # NEW
-    simulations: Dict[str, Any]
+    refined_forecasts: Dict[str, Any]
+    risk_metrics: Dict[str, Any]
+    simulations: Dict[str, Any] # Legacy field, kept for compatibility if needed
     summary: str
-    confidence_level: str                         # NEW
+    confidence_level: str
 
 class ResearchAgent(LangGraphAgent):
     def __init__(self, logger: LoggerService, storage: StorageService,
                  news_service: Any = None, history_service: Any = None,
-                 forecast_service: Any = None,
-                 forecasting_engine: Any = None,  # NEW
-                 macro_service: Any = None,       # NEW
-                 risk_calculator: Any = None,     # NEW
+                 llm_service: Any = None,
+                 forecasting_engine: Any = None,
+                 macro_service: Any = None, 
+                 risk_calculator: Any = None,
                  config_service: Any = None):
         super().__init__(logger, storage)
         self.news_service = news_service
         self.history_service = history_service
-        self.forecast_service = forecast_service
-        self.forecasting_engine = forecasting_engine  # NEW
-        self.macro_service = macro_service            # NEW
-        self.risk_calculator = risk_calculator        # NEW
+        self.llm_service = llm_service
+        self.forecasting_engine = forecasting_engine
+        self.macro_service = macro_service
+        self.risk_calculator = risk_calculator
         self.config_service = config_service or ConfigService()
 
     def search_node(self, state: AgentState) -> Dict[str, Any]:
@@ -50,8 +51,6 @@ class ResearchAgent(LangGraphAgent):
         if self.history_service and self.config_service:
             # Get tickers from config
             tickers = self.config_service.get_all_symbols()
-
-            # Get settings from config
             settings = self.config_service.get_data_settings()
             period = settings.get('default_period', '5y')
 
@@ -63,14 +62,8 @@ class ResearchAgent(LangGraphAgent):
                     include_dividends=True,
                     include_fundamentals=True
                 )
-
-                # Analyze data
                 analysis = self._analyze_etf_data(data)
-
-                return {
-                    "market_data": data,
-                    "etf_analysis": analysis
-                }
+                return {"market_data": data, "etf_analysis": analysis}
             except Exception as e:
                 self.logger.error(f"Error fetching market data: {e}")
                 return {"market_data": {}, "etf_analysis": {}}
@@ -78,7 +71,6 @@ class ResearchAgent(LangGraphAgent):
         return {"market_data": {}, "etf_analysis": {}}
 
     def _analyze_etf_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Perform analysis on ETF data."""
         analysis = {
             "performance_summary": {},
             "dividend_analysis": {},
@@ -86,18 +78,15 @@ class ResearchAgent(LangGraphAgent):
             "top_performers": [],
             "top_dividend_payers": []
         }
-
         performance_by_ticker = {}
 
         for ticker, etf_data in data.items():
             if not etf_data.get("ohlcv"):
                 continue
-
             ohlcv = etf_data["ohlcv"]
             if len(ohlcv) < 2:
                 continue
-
-            # Calculate performance metrics
+                
             start_price = ohlcv[0]["close"]
             end_price = ohlcv[-1]["close"]
             total_return = ((end_price - start_price) / start_price) * 100
@@ -109,100 +98,151 @@ class ResearchAgent(LangGraphAgent):
                 "data_points": len(ohlcv)
             }
             performance_by_ticker[ticker] = total_return
+            
+            # Dividend and Valuation logic could be added here
 
-            # Dividend analysis
-            dividends = etf_data.get("dividends", [])
-            if dividends:
-                total_dividends = sum(d["amount"] for d in dividends)
-                analysis["dividend_analysis"][ticker] = {
-                    "total_dividends": round(total_dividends, 2),
-                    "dividend_count": len(dividends),
-                    "latest_dividend": dividends[-1] if dividends else None
-                }
-
-            # Valuation metrics from fundamentals
-            fundamentals = etf_data.get("fundamentals", {})
-            if fundamentals:
-                analysis["valuation_metrics"][ticker] = {
-                    "pe_ratio": fundamentals.get("trailingPE"),
-                    "market_cap": fundamentals.get("marketCap"),
-                    "dividend_yield": fundamentals.get("dividendYield"),
-                    "beta": fundamentals.get("beta")
-                }
-
-        # Find top performers
         if performance_by_ticker:
             sorted_by_return = sorted(performance_by_ticker.items(), key=lambda x: x[1], reverse=True)
-            analysis["top_performers"] = [
-                {"ticker": t, "return_pct": round(r, 2)}
-                for t, r in sorted_by_return[:5]
-            ]
-
-        # Find top dividend payers
-        if analysis["dividend_analysis"]:
-            sorted_by_dividends = sorted(
-                analysis["dividend_analysis"].items(),
-                key=lambda x: x[1]["total_dividends"],
-                reverse=True
-            )
-            analysis["top_dividend_payers"] = [
-                {"ticker": t, "total_dividends": d["total_dividends"]}
-                for t, d in sorted_by_dividends[:5]
-            ]
+            analysis["top_performers"] = [{"ticker": t, "return_pct": round(r, 2)} for t, r in sorted_by_return[:5]]
 
         return analysis
 
     async def analyze_scenarios_node(self, state: AgentState) -> Dict[str, Any]:
-        # In a real agent, this would use an LLM to look at news and set biases
-        # For now, we simulate a "Base Case" with neutral bias
-        return {"scenarios": {"SPY": {"drift_adj": 0.0, "vol_adj": 0.0}}}
+        """Generate scenarios using LLM based on market data and technicals."""
+        if not self.llm_service:
+            # Fallback
+            return {"scenarios": {"SPY": {"base_case": {"weight": 1.0, "drift_adj": 0.0, "vol_adj": 0.0}}}}
+
+        query = state.get("query", "")
+        market_regime = state.get("market_regime", {})
+        macro = state.get("macro_indicators", {})
+        
+        # Construct prompt for LLM
+        prompt = f"""
+        You are a financial analyst. Based on the following context, generate 3 specific market scenarios 
+        (Base Case, Bull Case, Bear Case) for the requested analysis.
+        
+        User Query: "{query}"
+        
+        Market Regime: {json.dumps(market_regime, indent=2)}
+        Macro Indicators: {json.dumps(macro, indent=2)}
+        
+        For each scenario, provide:
+        1. A weight (probability) - must sum to 1.0
+        2. 'drift_adj': A drift adjustment factor (e.g. 0.05 for +5% annual return boost, -0.05 for -5%)
+        3. 'vol_adj': A volatility adjustment factor (e.g. 0.2 for +20% volatility increase)
+        4. Description of the scenario logic.
+
+        Format strictly as JSON with keys: "scenarios" -> Ticker -> Case Name.
+        Use "GLOBAL" as ticker key if scenarios apply to all assets, or specific tickers like "SPY" if specific.
+        """
+        
+        try:
+            # Call LLM Service
+            response_json = await self.llm_service.generate_json(prompt)
+            return {"scenarios": response_json.get("scenarios", {})}
+        except Exception as e:
+            self.logger.error(f"Error generating scenarios with LLM: {e}")
+            return {"scenarios": {}}
+
+    async def refined_forecast_node(self, state: AgentState) -> Dict[str, Any]:
+        """Generate refined forecasts using scenario parameters from LLM."""
+        if not self.forecasting_engine:
+            return {"refined_forecasts": {}}
+
+        scenarios = state.get("scenarios", {})
+        # If scenarios are GLOBAL, apply to top tickers
+        tickers = list(state.get("market_data", {}).keys())[:5]
+        
+        if not tickers:
+            return {"refined_forecasts": {}}
+
+        refined_results = {}
+        
+        try:
+            # Iterate through cases (Base, Bull, Bear)
+            # We assume the structure from LLM is Scenarios -> Ticker -> Case
+            # If "GLOBAL" is in scenarios, replicate for all tickers
+            
+            global_scenarios = scenarios.get("GLOBAL", {})
+            
+            cases = ["base_case", "bull_case", "bear_case"]
+            
+            for case in cases:
+                case_params = {}
+                
+                # Build params for this specific case across all tickers
+                for ticker in tickers:
+                    # Specific or Global?
+                    ticker_scenario = scenarios.get(ticker, global_scenarios)
+                    case_data = ticker_scenario.get(case)
+                    
+                    if case_data:
+                        case_params[ticker] = {
+                            "drift_adj": case_data.get("drift_adj", 0.0),
+                            "vol_adj": case_data.get("vol_adj", 0.0)
+                        }
+                
+                if case_params:
+                    # Run forecast for this case
+                    results = await self.forecasting_engine.run_forecast_suite(
+                        tickers=list(case_params.keys()),
+                        horizon="6mo",
+                        models=["gbm"],
+                        simulations=1000,
+                        scenarios=case_params
+                    )
+                    refined_results[case] = results
+            
+            return {"refined_forecasts": refined_results}
+            
+        except Exception as e:
+            self.logger.error(f"Error in refined forecast: {e}")
+            return {"refined_forecasts": {}}
 
     async def simulation_node(self, state: AgentState) -> Dict[str, Any]:
-        if not self.forecast_service:
-            return {"simulations": {}}
-        
-        tickers = list(state.get("market_data", {}).keys())
-        if not tickers:
-            tickers = ["SPY"] # Fallback
-
-        try:
-            results = await self.forecast_service.run_monte_carlo(
-                tickers=tickers[:5], # Limit to first 5 for performance in demo
-                days=252,
-                simulations=1000,
-                scenarios=state.get("scenarios")
-            )
-            return {"simulations": results}
-        except Exception as e:
-            self.logger.error(f"Error running simulation: {e}")
-            return {"simulations": {}}
+        # Legacy node - using refined_forecasts instead
+        # Just passing through or mapping refined base case to simulations
+        refined = state.get("refined_forecasts", {})
+        base_case = refined.get("base_case", {})
+        if base_case:
+             # Extract simple simulation format from base case ensemble
+             sim_results = {}
+             ensemble = base_case.get("ensemble", {})
+             for ticker, data in ensemble.items():
+                 # Map ensemble structure to simple structure expected by UI/Summary
+                 term = data.get("terminal", {})
+                 metrics = data.get("return_metrics", {})
+                 sim_results[ticker] = {
+                     "return_mean": metrics.get("mean_return", 0),
+                     "percentile_5": term.get("p5", 0), # Engine might use different keys, need to check GBM output
+                     "percentile_95": term.get("p95", 0),
+                     "prob_positive_return": metrics.get("prob_positive_return", 0)
+                 }
+             return {"simulations": sim_results}
+        return {"simulations": {}}
 
     def summarize_node(self, state: AgentState) -> Dict[str, Any]:
         """Generate summary using research and market data."""
         results = state.get("research_results", [])
-        market_data = state.get("market_data", {})
-        etf_analysis = state.get("etf_analysis", {})
-        sims = state.get("simulations", {})
+        scenarios = state.get("scenarios", {})
+        refined = state.get("refined_forecasts", {})
+        
+        summary = f"Summary of research based on query: {state.get('query')}\n\n"
+        
+        if scenarios:
+             summary += "### Scenario Analysis (AI Generated)\n"
+             # Simply dump the scenario descriptions
+             global_sc = scenarios.get("GLOBAL", {})
+             for case, data in global_sc.items():
+                 summary += f"- **{case.replace('_', ' ').title()}** ({data.get('weight',0):.0%} prob): {data.get('description')}\n"
 
-        summary = f"Summary of {len(results)} research results."
-
-        if market_data:
-            summary += f" Analyzed {len(market_data)} ETFs with 5-year historical data."
-
-        if etf_analysis.get("top_performers"):
-            top = etf_analysis["top_performers"][0]
-            summary += f" Best performer: {top['ticker']} ({top['return_pct']}%)."
-
-        if etf_analysis.get("top_dividend_payers"):
-            top_div = etf_analysis["top_dividend_payers"][0]
-            summary += f" Top dividend payer: {top_div['ticker']} (${top_div['total_dividends']})."
-
-        if sims:
-            summary += "\n\nMonte Carlo Simulation Results (1-year horizon):"
-            for ticker, sim in sims.items():
-                summary += f"\n- {ticker}: Expected return {sim['return_mean']:.2%}, "
-                summary += f"95% CI: [{sim['percentile_5']:.2f}, {sim['percentile_95']:.2f}]"
-                summary += f" (Prob. of positive return: {sim['prob_positive_return']:.1%})"
+        if refined:
+            summary += "\n### Forecast Results (6 Months)\n"
+            base = refined.get("base_case", {}).get("ensemble", {})
+            for ticker, data in base.items():
+                ret = data.get("return_metrics", {}).get("mean_return", 0)
+                summary += f"- **{ticker}**: Expected Return {ret:.1%}\n"
 
         return {"summary": summary}
 
@@ -216,19 +256,12 @@ class ResearchAgent(LangGraphAgent):
             return {"technical_indicators": {}, "market_regime": {}}
 
         try:
-            # Get technical indicators
             indicators = await self.history_service.get_technical_indicators(
-                tickers=tickers[:5],  # Limit for performance
+                tickers=tickers[:5],
                 indicators=["RSI", "MACD", "BBANDS", "SMA", "EMA", "ADX", "ATR"]
             )
-
-            # Get market regime
             regime = await self.history_service.get_market_regime(tickers[:5])
-
-            return {
-                "technical_indicators": indicators,
-                "market_regime": regime
-            }
+            return {"technical_indicators": indicators, "market_regime": regime}
         except Exception as e:
             self.logger.error(f"Error in technical analysis: {e}")
             return {"technical_indicators": {}, "market_regime": {}}
@@ -237,20 +270,10 @@ class ResearchAgent(LangGraphAgent):
         """Fetch and analyze macro economic indicators."""
         if not self.macro_service:
             return {"macro_indicators": {}}
-
         try:
-            # Assess US economic regime
             us_regime = await self.macro_service.assess_macro_regime("US")
-
-            # Get key indicators
             indicators = await self.macro_service.get_macro_indicators("US")
-
-            return {
-                "macro_indicators": {
-                    "regime": us_regime,
-                    "indicators": indicators
-                }
-            }
+            return {"macro_indicators": {"regime": us_regime, "indicators": indicators}}
         except Exception as e:
             self.logger.error(f"Error in macro analysis: {e}")
             return {"macro_indicators": {}}
@@ -265,115 +288,16 @@ class ResearchAgent(LangGraphAgent):
             return {"baseline_forecasts": {}}
 
         try:
-            # Run baseline forecast suite
             results = await self.forecasting_engine.run_forecast_suite(
-                tickers=tickers[:5],  # Limit for performance
+                tickers=tickers[:5],
                 horizon="6mo",
                 models=["gbm", "arima"],
                 simulations=1000
             )
-
             return {"baseline_forecasts": results}
         except Exception as e:
             self.logger.error(f"Error in baseline forecast: {e}")
             return {"baseline_forecasts": {}}
-
-    async def scenario_generation_node(self, state: AgentState) -> Dict[str, Any]:
-        """Generate scenarios based on baseline, technicals, and macro analysis."""
-        baseline = state.get("baseline_forecasts", {})
-        technical = state.get("technical_indicators", {})
-        macro = state.get("macro_indicators", {})
-        market_regime = state.get("market_regime", {})
-
-        scenarios = {}
-
-        # Generate scenarios for each ticker
-        for ticker in baseline.get("tickers", []):
-            # Get ensemble forecast from baseline
-            ensemble = baseline.get("ensemble", {}).get(ticker, {})
-            base_return = ensemble.get("return_metrics", {}).get("mean_return", 0)
-
-            # Adjust scenarios based on market regime
-            ticker_regime = market_regime.get(ticker, {}).get("trend", {})
-            trend_direction = ticker_regime.get("direction", "sideways")
-
-            # Base case (60% weight)
-            base_drift = 0.0
-            base_vol = 0.0
-
-            # Adjust based on trend
-            if trend_direction == "uptrend":
-                base_drift = 0.01  # Slight positive adjustment
-            elif trend_direction == "downtrend":
-                base_drift = -0.01  # Slight negative adjustment
-
-            # Bull case (20% weight)
-            bull_drift = base_drift + 0.05
-            bull_vol = -0.1  # Lower volatility in bull market
-
-            # Bear case (20% weight)
-            bear_drift = base_drift - 0.05
-            bear_vol = 0.2  # Higher volatility in bear market
-
-            scenarios[ticker] = {
-                "base_case": {
-                    "weight": 0.6,
-                    "drift_adj": base_drift,
-                    "vol_adj": base_vol,
-                    "description": "Base case scenario with current market conditions"
-                },
-                "bull_case": {
-                    "weight": 0.2,
-                    "drift_adj": bull_drift,
-                    "vol_adj": bull_vol,
-                    "description": "Optimistic scenario with favorable market conditions"
-                },
-                "bear_case": {
-                    "weight": 0.2,
-                    "drift_adj": bear_drift,
-                    "vol_adj": bear_vol,
-                    "description": "Pessimistic scenario with adverse market conditions"
-                }
-            }
-
-        return {"scenarios": scenarios}
-
-    async def refined_forecast_node(self, state: AgentState) -> Dict[str, Any]:
-        """Generate refined forecasts using scenario parameters."""
-        if not self.forecasting_engine:
-            return {"refined_forecasts": {}}
-
-        scenarios = state.get("scenarios", {})
-        tickers = list(scenarios.keys())
-        if not tickers:
-            return {"refined_forecasts": {}}
-
-        try:
-            refined = {}
-
-            # Run forecast for each scenario
-            for scenario_name in ["base_case", "bull_case", "bear_case"]:
-                scenario_params = {}
-                for ticker, ticker_scenarios in scenarios.items():
-                    if scenario_name in ticker_scenarios:
-                        scenario_params[ticker] = ticker_scenarios[scenario_name]
-
-                if scenario_params:
-                    # Run forecast with scenario parameters
-                    results = await self.forecasting_engine.run_forecast_suite(
-                        tickers=tickers,
-                        horizon="6mo",
-                        models=["gbm"],
-                        simulations=1000,
-                        scenarios=scenario_params
-                    )
-
-                    refined[scenario_name] = results
-
-            return {"refined_forecasts": refined}
-        except Exception as e:
-            self.logger.error(f"Error in refined forecast: {e}")
-            return {"refined_forecasts": {}}
 
     async def risk_analysis_node(self, state: AgentState) -> Dict[str, Any]:
         """Calculate risk metrics for all tickers."""
@@ -385,41 +309,37 @@ class ResearchAgent(LangGraphAgent):
             return {"risk_metrics": {}}
 
         try:
-            # Fetch price history
             price_history = {}
             for ticker in tickers[:5]:
                 df = await self.history_service.get_history(ticker, period="2y")
                 if df is not None:
                     price_history[ticker] = df
 
-            # Calculate risk metrics
             metrics = self.risk_calculator.calculate_all_risk_metrics(
                 price_history,
                 confidence_levels=[0.95, 0.99]
             )
-
             return {"risk_metrics": metrics}
         except Exception as e:
             self.logger.error(f"Error in risk analysis: {e}")
             return {"risk_metrics": {}}
 
     def build_graph(self) -> StateGraph:
-        # Initialize Graph with State
         workflow = StateGraph(AgentState)
-
+        
         # Add Nodes
         workflow.add_node("search", self.search_node)
         workflow.add_node("fetch_market", self.fetch_market_data_node)
-        workflow.add_node("technical_analysis", self.technical_analysis_node)  # NEW
-        workflow.add_node("macro_analysis", self.macro_analysis_node)  # NEW
-        workflow.add_node("baseline_forecast", self.baseline_forecast_node)  # NEW
-        workflow.add_node("analyze_scenarios", self.scenario_generation_node)  # Enhanced
-        workflow.add_node("refined_forecast", self.refined_forecast_node)  # NEW
-        workflow.add_node("risk_analysis", self.risk_analysis_node)  # NEW
-        workflow.add_node("simulation", self.simulation_node)  # Legacy, kept for compatibility
+        workflow.add_node("technical_analysis", self.technical_analysis_node)
+        workflow.add_node("macro_analysis", self.macro_analysis_node)
+        workflow.add_node("baseline_forecast", self.baseline_forecast_node)
+        workflow.add_node("analyze_scenarios", self.analyze_scenarios_node) # LLM Powered
+        workflow.add_node("refined_forecast", self.refined_forecast_node)
+        workflow.add_node("risk_analysis", self.risk_analysis_node)
+        workflow.add_node("simulation", self.simulation_node) # Adapter
         workflow.add_node("summarize", self.summarize_node)
 
-        # Add Edges - Enhanced workflow
+        # Add Edges
         workflow.set_entry_point("search")
         workflow.add_edge("search", "fetch_market")
         workflow.add_edge("fetch_market", "technical_analysis")
@@ -427,11 +347,11 @@ class ResearchAgent(LangGraphAgent):
         workflow.add_edge("macro_analysis", "baseline_forecast")
         workflow.add_edge("baseline_forecast", "analyze_scenarios")
         workflow.add_edge("analyze_scenarios", "refined_forecast")
-        workflow.add_edge("refined_forecast", "risk_analysis")
+        workflow.add_edge("refined_forecast", "simulation") # Chain adapter
+        workflow.add_edge("simulation", "risk_analysis")
         workflow.add_edge("risk_analysis", "summarize")
         workflow.add_edge("summarize", END)
 
-        # Compile
         return workflow.compile()
 
     def get_initial_state(self, input_data: Any) -> Dict[str, Any]:

@@ -95,22 +95,35 @@ export interface OptimizationResult {
         ticker: string;
         weight: number;
         amount: number;
-        expected_return: number;
+        expected_return?: number | null;
         shares: number;
         price: number;
+        annual_expense_ratio?: number | null;
+        contribution_to_risk?: number | null;
     }>;
     efficient_frontier?: Array<{
-        annual_volatility: number;
-        annual_return: number;
-        sharpe_ratio: number;
+        annual_volatility?: number | null;
+        annual_return?: number | null;
+        sharpe_ratio?: number | null;
     }>;
     metrics?: {
         net_investment: number;
         total_commission: number;
-        expected_annual_return: number;
-        annual_volatility: number;
-        sharpe_ratio: number;
+        annual_custody_cost?: number;
+        expected_annual_return?: number | null;
+        annual_volatility?: number | null;
+        sharpe_ratio?: number | null;
+        [key: string]: number | string | null | undefined;
     };
+    scenarios?: Array<{
+        name: string;
+        probability: number;
+        description: string;
+        expected_portfolio_value?: number | null;
+        expected_return?: number | null;
+        annual_volatility?: number | null;
+    }>;
+    llm_report?: string;
     error?: string;
 }
 
@@ -132,7 +145,7 @@ export async function optimizePortfolio(amount: number, currency: string): Promi
 }
 
 export async function getOptimizationStatus(jobId: string): Promise<OptimizationResult> {
-    const response = await fetch(`/api/portfolio/${jobId}`);
+    const response = await fetch(`/api/portfolio/optimize/${jobId}`);
 
     if (!response.ok) {
         const error = await response.json();
