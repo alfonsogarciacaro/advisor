@@ -1,0 +1,105 @@
+# ETF Configuration for Financial Advisor
+# Organized by asset class and market
+
+etfs:
+  # US Equity Indices
+  - symbol: "SPY"
+    name: "SPDR S&P 500 ETF Trust"
+    description: "Tracks the S&P 500 index - large cap US stocks"
+    asset_class: "equity_indices"
+    market: "US"
+    benchmark: "S&P 500"
+
+  - symbol: "QQQ"
+    name: "Invesco QQQ Trust"
+    description: "Tracks Nasdaq-100 - tech-heavy index"
+    asset_class: "equity_indices"
+    market: "US"
+    benchmark: "Nasdaq-100"
+
+  - symbol: "IWM"
+    name: "iShares Russell 2000 ETF"
+    description: "Tracks Russell 2000 - small cap US stocks"
+    asset_class: "equity_indices"
+    market: "US"
+    benchmark: "Russell 2000"
+
+  # Japan Equity Indices
+  - symbol: "1306.T"
+    name: "NEXT FUNDS Nikkei 225 ETF"
+    description: "Tracks Nikkei 225 index - Japan's primary stock index"
+    asset_class: "equity_indices"
+    market: "JP"
+    benchmark: "Nikkei 225"
+
+  - symbol: "1321.T"
+    name: "NEXT FUNDS TOPIX ETF"
+    description: "Tracks TOPIX index - all Tokyo Stock Exchange First Section stocks"
+    asset_class: "equity_indices"
+    market: "JP"
+    benchmark: "TOPIX"
+
+  # US Fixed Income
+  - symbol: "AGG"
+    name: "iShares Core U.S. Aggregate Bond ETF"
+    description: "Tracks broad US investment grade bond market"
+    asset_class: "fixed_income"
+    market: "US"
+    sub_type: "government"
+
+  # Japan Fixed Income
+  - symbol: "2561.T"
+    name: "iShares Core Japan Government Bond ETF"
+    description: "Tracks FTSE Japanese Government Bond Index - exposure to JGBs"
+    asset_class: "fixed_income"
+    market: "JP"
+    sub_type: "government"
+
+  # US REITs
+  - symbol: "VNQ"
+    name: "Vanguard Real Estate ETF"
+    description: "Tracks US REITs - real estate investment trusts"
+    asset_class: "reits"
+    market: "US"
+
+  # Japan REITs
+  - symbol: "1343.T"
+    name: "NEXT FUNDS REIT Index ETF"
+    description: "Tracks Tokyo Stock Exchange REIT Index - Japanese real estate"
+    asset_class: "reits"
+    market: "JP"
+
+  # Commodities
+  - symbol: "GLD"
+    name: "SPDR Gold Shares"
+    description: "Tracks gold bullion price"
+    asset_class: "commodities"
+    market: "US"
+    commodity: "gold"
+
+  - symbol: "USO"
+    name: "United States Oil Fund"
+    description: "Tracks West Texas Intermediate crude oil"
+    asset_class: "commodities"
+    market: "US"
+    commodity: "oil"
+
+# Data fetching settings
+data_settings:
+  default_period: "5y"      # 5 years historical data
+  default_interval: "1d"    # Daily data
+  cache_ttl_hours: 24       # OHLCV cache TTL
+  fundamentals_ttl_hours: 168  # Fundamentals cache TTL (1 week)
+
+# Fundamental data fields to fetch
+fundamental_fields:
+  - "marketCap"         # Market capitalization
+  - "trailingPE"        # P/E ratio (TTM)
+  - "forwardPE"         # Forward P/E
+  - "pegRatio"          # PEG ratio
+  - "priceToBook"       # P/B ratio
+  - "dividendYield"     # Annual dividend yield
+  - "beta"              # Beta coefficient
+  - "52WeekChange"      # 52-week price change
+  - "enterpriseValue"   # Enterprise value
+  - "profitMargins"     # Profit margin
