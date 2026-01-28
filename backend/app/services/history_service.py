@@ -1,8 +1,16 @@
 import datetime
 import pandas as pd
+import numpy as np
 import yfinance as yf
 from .storage_service import StorageService
 from typing import List, Dict, Any, Optional
+
+# Import pandas-ta for technical indicators
+try:
+    import pandas_ta as ta
+    PANDAS_TA_AVAILABLE = True
+except ImportError:
+    PANDAS_TA_AVAILABLE = False
 
 class HistoryService:
     def __init__(self, storage: StorageService, ttl_hours: int = 24):
@@ -369,3 +377,346 @@ class HistoryService:
                     result[ticker]["fundamentals"] = data
 
         return result
+
+    async def get_history(self, ticker: str, period: str = "2y") -> Optional[pd.DataFrame]:
+        """
+        Fetch historical data as DataFrame for analysis.
+
+        Args:
+            ticker: Ticker symbol
+            period: Historical period
+
+        Returns:
+            DataFrame with OHLCV data or None
+        """
+        data = await self.get_historical_data([ticker], period=period)
+
+        if ticker not in data or not data[ticker]:
+            return None
+
+        df = pd.DataFrame(data[ticker])
+        df['date'] = pd.to_datetime(df['date'])
+        df.set_index('date', inplace=True)
+        df.sort_index(inplace=True)
+
+        # Capitalize column names for consistency
+        df.columns = [col.capitalize() for col in df.columns]
+
+        return df
+
+    async def get_technical_indicators(
+        self,
+        tickers: List[str],
+        indicators: Optional[List[str]] = None,
+        period: str = "1y"
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Calculate technical indicators using pandas-ta.
+
+        Args:
+            tickers: List of ticker symbols
+            indicators: List of indicators to calculate (default: all)
+            period: Historical period for calculation
+
+        Returns:
+            Dict of {ticker: {indicator: value}}
+        """
+        if not PANDAS_TA_AVAILABLE:
+            return {
+                ticker: {"error": "pandas-ta not available. Install with: pip install pandas-ta"}
+                for ticker in tickers
+            }
+
+        if indicators is None:
+            indicators = ["RSI", "MACD", "BBANDS", "SMA", "EMA", "ADX", "ATR"]
+
+        results = {}
+
+        for ticker in tickers:
+            df = await self.get_history(ticker, period=period)
+
+            if df is None or df.empty:
+                results[ticker] = {"error": "No historical data available"}
+                continue
+
+            try:
+                ticker_indicators = self._calculate_indicators(df, indicators)
+                results[ticker] = ticker_indicators
+
+            except Exception as e:
+                results[ticker] = {"error": f"Failed to calculate indicators: {str(e)}"}
+
+        return results
+
+    def _calculate_indicators(
+        self,
+        df: pd.DataFrame,
+        indicators: List[str]
+    ) -> Dict[str, Any]:
+        """Calculate technical indicators on DataFrame."""
+        result = {}
+
+        # Ensure we have the required columns
+        if len(df.columns) < 4:
+            return {"error": "Insufficient OHLCV data"}
+
+        # Trend Indicators
+        if "SMA" in indicators or "EMA" in indicators:
+            if len(df) >= 50:
+                result["sma_50"] = float(df["Close"].tail(50).mean())
+                result["sma_200"] = float(df["Close"].tail(200).mean()) if len(df) >= 200 else None
+
+            if len(df) >= 20:
+                result["ema_20"] = float(df["Close"].tail(20).ewm(span=20, adjust=False).mean())
+
+        # Momentum: RSI
+        if "RSI" in indicators and len(df) >= 15:
+            rsi_period = 14
+            delta = df["Close"].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=rsi_period).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=rsi_period).mean()
+            rs = gain / loss
+            rsi = 100 - (100 / (1 + rs))
+            result["rsi"] = float(rsi.iloc[-1])
+
+        # Momentum: MACD
+        if "MACD" in indicators and len(df) >= 26:
+            ema_12 = df["Close"].ewm(span=12, adjust=False).mean()
+            ema_26 = df["Close"].ewm(span=26, adjust=False).mean()
+            macd_line = ema_12 - ema_26
+            signal_line = macd_line.ewm(span=9, adjust=False).mean()
+            histogram = macd_line - signal_line
+
+            result["macd"] = {
+                "value": float(macd_line.iloc[-1]),
+                "signal": float(signal_line.iloc[-1]),
+                "histogram": float(histogram.iloc[-1]),
+            }
+
+        # Volatility: Bollinger Bands
+        if "BBANDS" in indicators and len(df) >= 20:
+            sma_20 = df["Close"].rolling(window=20).mean()
+            std_20 = df["Close"].rolling(window=20).std()
+            upper_band = sma_20 + (2 * std_20)
+            lower_band = sma_20 - (2 * std_20)
+
+            current_price = float(df["Close"].iloc[-1])
+            result["bollinger_bands"] = {
+                "upper": float(upper_band.iloc[-1]),
+                "middle": float(sma_20.iloc[-1]),
+                "lower": float(lower_band.iloc[-1]),
+                "bandwidth": float(
+                    (upper_band.iloc[-1] - lower_band.iloc[-1]) / sma_20.iloc[-1]
+                ),
+                "position": self._get_bb_position(current_price, upper_band.iloc[-1], lower_band.iloc[-1]),
+            }
+
+        # Trend Strength: ADX (if High/Low available)
+        if "ADX" in indicators and "High" in df.columns and "Low" in df.columns and len(df) >= 14:
+            # Simplified ADX calculation
+            high = df["High"]
+            low = df["Low"]
+            close = df["Close"]
+
+            plus_dm = high.diff()
+            minus_dm = -low.diff()
+            plus_dm[plus_dm < 0] = 0
+            minus_dm[minus_dm < 0] = 0
+
+            tr1 = high - low
+            tr2 = abs(high - close.shift())
+            tr3 = abs(low - close.shift())
+            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
+            atr = tr.rolling(window=14).mean()
+            plus_di = 100 * (plus_dm.rolling(window=14).mean() / atr)
+            minus_di = 100 * (minus_dm.rolling(window=14).mean() / atr)
+
+            dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+            adx = dx.rolling(window=14).mean()
+
+            result["adx"] = {
+                "value": float(adx.iloc[-1]),
+                "plus_di": float(plus_di.iloc[-1]),
+                "minus_di": float(minus_di.iloc[-1]),
+                "trend_strength": self._get_adx_trend(adx.iloc[-1]),
+            }
+
+        # Volatility: ATR
+        if "ATR" in indicators and "High" in df.columns and "Low" in df.columns and len(df) >= 14:
+            high = df["High"]
+            low = df["Low"]
+            close = df["Close"]
+
+            tr1 = high - low
+            tr2 = abs(high - close.shift())
+            tr3 = abs(low - close.shift())
+            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+            atr = tr.rolling(window=14).mean()
+
+            result["atr"] = {
+                "value": float(atr.iloc[-1]),
+                "percent": float(atr.iloc[-1] / close.iloc[-1]),
+            }
+
+        return result
+
+    def _get_bb_position(self, price: float, upper: float, lower: float) -> str:
+        """Determine price position relative to Bollinger Bands."""
+        if price >= upper:
+            return "above_upper"
+        elif price <= lower:
+            return "below_lower"
+        else:
+            mid = (upper + lower) / 2
+            if price > mid:
+                return "upper_half"
+            else:
+                return "lower_half"
+
+    def _get_adx_trend(self, adx: float) -> str:
+        """Classify trend strength based on ADX value."""
+        if adx >= 50:
+            return "strong_trend"
+        elif adx >= 25:
+            return "trending"
+        elif adx >= 20:
+            return "weak_trend"
+        else:
+            return "ranging"
+
+    async def get_market_regime(
+        self,
+        tickers: List[str],
+        period: str = "1y"
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Detect current market regime using technical indicators.
+
+        Args:
+            tickers: List of ticker symbols
+            period: Historical period for analysis
+
+        Returns:
+            Dict of {ticker: regime_info}
+        """
+        indicators = await self.get_technical_indicators(
+            tickers,
+            indicators=["SMA", "RSI", "MACD", "BBANDS", "ADX"],
+            period=period
+        )
+
+        results = {}
+
+        for ticker, data in indicators.items():
+            if "error" in data:
+                results[ticker] = {"error": data["error"]}
+                continue
+
+            # Detect trend
+            trend = self._detect_trend(data)
+
+            # Detect volatility regime
+            volatility = self._detect_volatility_regime(data)
+
+            # Detect support/resistance
+            sr = self._detect_support_resistance(data)
+
+            # Overall market sentiment
+            sentiment = self._assess_sentiment(data)
+
+            results[ticker] = {
+                "trend": trend,
+                "volatility_regime": volatility,
+                "support_resistance": sr,
+                "sentiment": sentiment,
+            }
+
+        return results
+
+    def _detect_trend(self, indicators: Dict[str, Any]) -> Dict[str, str]:
+        """Detect trend direction and strength."""
+        trend = {
+            "direction": "sideways",
+            "strength": "weak",
+        }
+
+        # SMA crossover analysis
+        if "sma_50" in indicators and "sma_200" in indicators:
+            if indicators["sma_50"] and indicators["sma_200"]:
+                if indicators["sma_50"] > indicators["sma_200"]:
+                    trend["direction"] = "uptrend"
+                else:
+                    trend["direction"] = "downtrend"
+
+        # ADX trend strength
+        if "adx" in indicators:
+            trend["strength"] = indicators["adx"]["trend_strength"]
+
+        return trend
+
+    def _detect_volatility_regime(self, indicators: Dict[str, Any]) -> str:
+        """Detect volatility regime from indicators."""
+        if "bollinger_bands" not in indicators:
+            return "unknown"
+
+        bb = indicators["bollinger_bands"]
+        bandwidth = bb["bandwidth"]
+
+        if bandwidth > 0.05:
+            return "high"
+        elif bandwidth > 0.03:
+            return "normal"
+        else:
+            return "low"
+
+    def _detect_support_resistance(self, indicators: Dict[str, Any]) -> Dict[str, float]:
+        """Detect support and resistance levels."""
+        sr = {
+            "support": None,
+            "resistance": None,
+        }
+
+        if "bollinger_bands" in indicators:
+            bb = indicators["bollinger_bands"]
+            sr["support"] = bb["lower"]
+            sr["resistance"] = bb["upper"]
+
+        return sr
+
+    def _assess_sentiment(self, indicators: Dict[str, Any]) -> str:
+        """Assess overall market sentiment."""
+        score = 0
+
+        # RSI sentiment
+        if "rsi" in indicators:
+            rsi = indicators["rsi"]
+            if rsi > 70:
+                score += 2  # Overbought - bearish signal
+            elif rsi < 30:
+                score -= 2  # Oversold - bullish signal
+            elif rsi > 50:
+                score += 1  # Slightly bullish
+            else:
+                score -= 1  # Slightly bearish
+
+        # MACD sentiment
+        if "macd" in indicators:
+            macd = indicators["macd"]
+            if macd["histogram"] > 0:
+                score += 1  # Bullish
+            else:
+                score -= 1  # Bearish
+
+        # Classify overall sentiment
+        if score >= 3:
+            return "very_bullish"
+        elif score >= 1:
+            return "bullish"
+        elif score <= -3:
+            return "very_bearish"
+        elif score <= -1:
+            return "bearish"
+        else:
+            return "neutral"
+

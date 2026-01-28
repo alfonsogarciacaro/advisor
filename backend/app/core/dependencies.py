@@ -53,10 +53,31 @@ def get_forecast_service() -> Any:
     return ForecastService(history_service)
 
 @lru_cache()
+def get_forecasting_engine() -> Any:
+    from app.services.forecasting_engine import ForecastingEngine
+    history_service = get_history_service()
+    config_service = get_config_service()
+    return ForecastingEngine(history_service, config_service)
+
+@lru_cache()
+def get_macro_service() -> Any:
+    from app.services.macro_service import MacroService
+    storage = get_storage_service()
+    return MacroService(storage)
+
+@lru_cache()
+def get_risk_calculator() -> Any:
+    from app.services.risk_calculators import RiskCalculator
+    return RiskCalculator()
+
+@lru_cache()
 def get_agent_service(
     news_service: NewsService = Depends(get_news_service),
     history_service: HistoryService = Depends(get_history_service),
     forecast_service: Any = Depends(get_forecast_service),
+    forecasting_engine: Any = Depends(get_forecasting_engine),
+    macro_service: Any = Depends(get_macro_service),
+    risk_calculator: Any = Depends(get_risk_calculator),
     config_service: ConfigService = Depends(get_config_service)
 ) -> AgentService:
     logger = get_logger()
@@ -75,6 +96,9 @@ def get_agent_service(
                 news_service=news_service,
                 history_service=history_service,
                 forecast_service=forecast_service,
+                forecasting_engine=forecasting_engine,
+                macro_service=macro_service,
+                risk_calculator=risk_calculator,
                 config_service=config_service
             )
 

@@ -18,6 +18,13 @@ dependencies = [
     "numpy>=1.26.0",
     "pandas>=2.2.0",
     "pyyaml>=6.0",
+    # Time series forecasting
+    "statsmodels>=0.14.0",
+    "scipy>=1.11.0",
+    # Technical analysis
+    "pandas-ta>=0.3.14b",
+    # Macro economic data
+    "fredapi>=0.4.0",
 ]
 
 [project.optional-dependencies]

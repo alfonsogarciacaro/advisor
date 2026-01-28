@@ -6,24 +6,38 @@ from app.services.logger_service import LoggerService
 from app.services.storage_service import StorageService
 from app.services.config_service import ConfigService
 
-# Define the Agent State
+# Define the Agent State - Enhanced with forecasting fields
 class AgentState(TypedDict):
     query: str
     research_results: list[str]
     market_data: Dict[str, Any]
     etf_analysis: Dict[str, Any]
+    technical_indicators: Dict[str, Any]          # NEW
+    market_regime: Dict[str, Any]                 # NEW
+    macro_indicators: Dict[str, Any]              # NEW
+    baseline_forecasts: Dict[str, Any]            # NEW
     scenarios: Dict[str, Any]
+    refined_forecasts: Dict[str, Any]             # NEW
+    risk_metrics: Dict[str, Any]                  # NEW
     simulations: Dict[str, Any]
     summary: str
+    confidence_level: str                         # NEW
 
 class ResearchAgent(LangGraphAgent):
     def __init__(self, logger: LoggerService, storage: StorageService,
                  news_service: Any = None, history_service: Any = None,
-                 forecast_service: Any = None, config_service: Any = None):
+                 forecast_service: Any = None,
+                 forecasting_engine: Any = None,  # NEW
+                 macro_service: Any = None,       # NEW
+                 risk_calculator: Any = None,     # NEW
+                 config_service: Any = None):
         super().__init__(logger, storage)
         self.news_service = news_service
         self.history_service = history_service
         self.forecast_service = forecast_service
+        self.forecasting_engine = forecasting_engine  # NEW
+        self.macro_service = macro_service            # NEW
+        self.risk_calculator = risk_calculator        # NEW
         self.config_service = config_service or ConfigService()
 
     def search_node(self, state: AgentState) -> Dict[str, Any]:
@@ -192,6 +206,203 @@ class ResearchAgent(LangGraphAgent):
 
         return {"summary": summary}
 
+    async def technical_analysis_node(self, state: AgentState) -> Dict[str, Any]:
+        """Analyze technical indicators and detect market regime."""
+        if not self.history_service:
+            return {"technical_indicators": {}, "market_regime": {}}
+
+        tickers = list(state.get("market_data", {}).keys())
+        if not tickers:
+            return {"technical_indicators": {}, "market_regime": {}}
+
+        try:
+            # Get technical indicators
+            indicators = await self.history_service.get_technical_indicators(
+                tickers=tickers[:5],  # Limit for performance
+                indicators=["RSI", "MACD", "BBANDS", "SMA", "EMA", "ADX", "ATR"]
+            )
+
+            # Get market regime
+            regime = await self.history_service.get_market_regime(tickers[:5])
+
+            return {
+                "technical_indicators": indicators,
+                "market_regime": regime
+            }
+        except Exception as e:
+            self.logger.error(f"Error in technical analysis: {e}")
+            return {"technical_indicators": {}, "market_regime": {}}
+
+    async def macro_analysis_node(self, state: AgentState) -> Dict[str, Any]:
+        """Fetch and analyze macro economic indicators."""
+        if not self.macro_service:
+            return {"macro_indicators": {}}
+
+        try:
+            # Assess US economic regime
+            us_regime = await self.macro_service.assess_macro_regime("US")
+
+            # Get key indicators
+            indicators = await self.macro_service.get_macro_indicators("US")
+
+            return {
+                "macro_indicators": {
+                    "regime": us_regime,
+                    "indicators": indicators
+                }
+            }
+        except Exception as e:
+            self.logger.error(f"Error in macro analysis: {e}")
+            return {"macro_indicators": {}}
+
+    async def baseline_forecast_node(self, state: AgentState) -> Dict[str, Any]:
+        """Run baseline forecasting models (GBM + ARIMA)."""
+        if not self.forecasting_engine:
+            return {"baseline_forecasts": {}}
+
+        tickers = list(state.get("market_data", {}).keys())
+        if not tickers:
+            return {"baseline_forecasts": {}}
+
+        try:
+            # Run baseline forecast suite
+            results = await self.forecasting_engine.run_forecast_suite(
+                tickers=tickers[:5],  # Limit for performance
+                horizon="6mo",
+                models=["gbm", "arima"],
+                simulations=1000
+            )
+
+            return {"baseline_forecasts": results}
+        except Exception as e:
+            self.logger.error(f"Error in baseline forecast: {e}")
+            return {"baseline_forecasts": {}}
+
+    async def scenario_generation_node(self, state: AgentState) -> Dict[str, Any]:
+        """Generate scenarios based on baseline, technicals, and macro analysis."""
+        baseline = state.get("baseline_forecasts", {})
+        technical = state.get("technical_indicators", {})
+        macro = state.get("macro_indicators", {})
+        market_regime = state.get("market_regime", {})
+
+        scenarios = {}
+
+        # Generate scenarios for each ticker
+        for ticker in baseline.get("tickers", []):
+            # Get ensemble forecast from baseline
+            ensemble = baseline.get("ensemble", {}).get(ticker, {})
+            base_return = ensemble.get("return_metrics", {}).get("mean_return", 0)
+
+            # Adjust scenarios based on market regime
+            ticker_regime = market_regime.get(ticker, {}).get("trend", {})
+            trend_direction = ticker_regime.get("direction", "sideways")
+
+            # Base case (60% weight)
+            base_drift = 0.0
+            base_vol = 0.0
+
+            # Adjust based on trend
+            if trend_direction == "uptrend":
+                base_drift = 0.01  # Slight positive adjustment
+            elif trend_direction == "downtrend":
+                base_drift = -0.01  # Slight negative adjustment
+
+            # Bull case (20% weight)
+            bull_drift = base_drift + 0.05
+            bull_vol = -0.1  # Lower volatility in bull market
+
+            # Bear case (20% weight)
+            bear_drift = base_drift - 0.05
+            bear_vol = 0.2  # Higher volatility in bear market
+
+            scenarios[ticker] = {
+                "base_case": {
+                    "weight": 0.6,
+                    "drift_adj": base_drift,
+                    "vol_adj": base_vol,
+                    "description": "Base case scenario with current market conditions"
+                },
+                "bull_case": {
+                    "weight": 0.2,
+                    "drift_adj": bull_drift,
+                    "vol_adj": bull_vol,
+                    "description": "Optimistic scenario with favorable market conditions"
+                },
+                "bear_case": {
+                    "weight": 0.2,
+                    "drift_adj": bear_drift,
+                    "vol_adj": bear_vol,
+                    "description": "Pessimistic scenario with adverse market conditions"
+                }
+            }
+
+        return {"scenarios": scenarios}
+
+    async def refined_forecast_node(self, state: AgentState) -> Dict[str, Any]:
+        """Generate refined forecasts using scenario parameters."""
+        if not self.forecasting_engine:
+            return {"refined_forecasts": {}}
+
+        scenarios = state.get("scenarios", {})
+        tickers = list(scenarios.keys())
+        if not tickers:
+            return {"refined_forecasts": {}}
+
+        try:
+            refined = {}
+
+            # Run forecast for each scenario
+            for scenario_name in ["base_case", "bull_case", "bear_case"]:
+                scenario_params = {}
+                for ticker, ticker_scenarios in scenarios.items():
+                    if scenario_name in ticker_scenarios:
+                        scenario_params[ticker] = ticker_scenarios[scenario_name]
+
+                if scenario_params:
+                    # Run forecast with scenario parameters
+                    results = await self.forecasting_engine.run_forecast_suite(
+                        tickers=tickers,
+                        horizon="6mo",
+                        models=["gbm"],
+                        simulations=1000,
+                        scenarios=scenario_params
+                    )
+
+                    refined[scenario_name] = results
+
+            return {"refined_forecasts": refined}
+        except Exception as e:
+            self.logger.error(f"Error in refined forecast: {e}")
+            return {"refined_forecasts": {}}
+
+    async def risk_analysis_node(self, state: AgentState) -> Dict[str, Any]:
+        """Calculate risk metrics for all tickers."""
+        if not self.risk_calculator or not self.history_service:
+            return {"risk_metrics": {}}
+
+        tickers = list(state.get("market_data", {}).keys())
+        if not tickers:
+            return {"risk_metrics": {}}
+
+        try:
+            # Fetch price history
+            price_history = {}
+            for ticker in tickers[:5]:
+                df = await self.history_service.get_history(ticker, period="2y")
+                if df is not None:
+                    price_history[ticker] = df
+
+            # Calculate risk metrics
+            metrics = self.risk_calculator.calculate_all_risk_metrics(
+                price_history,
+                confidence_levels=[0.95, 0.99]
+            )
+
+            return {"risk_metrics": metrics}
+        except Exception as e:
+            self.logger.error(f"Error in risk analysis: {e}")
+            return {"risk_metrics": {}}
+
     def build_graph(self) -> StateGraph:
         # Initialize Graph with State
         workflow = StateGraph(AgentState)
@@ -199,16 +410,25 @@ class ResearchAgent(LangGraphAgent):
         # Add Nodes
         workflow.add_node("search", self.search_node)
         workflow.add_node("fetch_market", self.fetch_market_data_node)
-        workflow.add_node("analyze_scenarios", self.analyze_scenarios_node)
-        workflow.add_node("simulation", self.simulation_node)
+        workflow.add_node("technical_analysis", self.technical_analysis_node)  # NEW
+        workflow.add_node("macro_analysis", self.macro_analysis_node)  # NEW
+        workflow.add_node("baseline_forecast", self.baseline_forecast_node)  # NEW
+        workflow.add_node("analyze_scenarios", self.scenario_generation_node)  # Enhanced
+        workflow.add_node("refined_forecast", self.refined_forecast_node)  # NEW
+        workflow.add_node("risk_analysis", self.risk_analysis_node)  # NEW
+        workflow.add_node("simulation", self.simulation_node)  # Legacy, kept for compatibility
         workflow.add_node("summarize", self.summarize_node)
 
-        # Add Edges
+        # Add Edges - Enhanced workflow
         workflow.set_entry_point("search")
         workflow.add_edge("search", "fetch_market")
-        workflow.add_edge("fetch_market", "analyze_scenarios")
-        workflow.add_edge("analyze_scenarios", "simulation")
-        workflow.add_edge("simulation", "summarize")
+        workflow.add_edge("fetch_market", "technical_analysis")
+        workflow.add_edge("technical_analysis", "macro_analysis")
+        workflow.add_edge("macro_analysis", "baseline_forecast")
+        workflow.add_edge("baseline_forecast", "analyze_scenarios")
+        workflow.add_edge("analyze_scenarios", "refined_forecast")
+        workflow.add_edge("refined_forecast", "risk_analysis")
+        workflow.add_edge("risk_analysis", "summarize")
         workflow.add_edge("summarize", END)
 
         # Compile
@@ -221,8 +441,15 @@ class ResearchAgent(LangGraphAgent):
                 "research_results": [],
                 "market_data": {},
                 "etf_analysis": {},
+                "technical_indicators": {},
+                "market_regime": {},
+                "macro_indicators": {},
+                "baseline_forecasts": {},
                 "scenarios": {},
+                "refined_forecasts": {},
+                "risk_metrics": {},
                 "simulations": {},
-                "summary": ""
+                "summary": "",
+                "confidence_level": "medium"
             }
         return input_data
