@@ -11,6 +11,7 @@ from app.services.storage_service import StorageService
 from app.infrastructure.storage.firestore_storage import FirestoreStorage
 from app.services.pubsub_service import PubSubService
 from app.infrastructure.pubsub.gcp_pubsub import GCPPubSubService
+from app.services.agent_service import AgentService
 
 @lru_cache()
 def get_logger() -> LoggerService:
@@ -37,3 +38,15 @@ def get_news_service() -> NewsService:
     storage = get_storage_service()
     ttl = int(os.getenv("NEWS_TTL_HOURS", "12"))
     return NewsService(provider=provider, storage=storage, ttl_hours=ttl)
+
+@lru_cache()
+def get_agent_service() -> AgentService:
+    logger = get_logger()
+    storage = get_storage_service()
+    service = AgentService(logger=logger, storage=storage)
+    
+    # Register Agents
+    from app.services.research_agent import ResearchAgent
+    service.register_agent("research", ResearchAgent)
+    
+    return service

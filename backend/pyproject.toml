@@ -12,6 +12,9 @@ dependencies = [
     "pydantic>=2.6.0",
     "pydantic-settings>=2.1.0",
     "httpx>=0.26.0",
+    "langgraph>=0.0.15",
+    "langchain-openai>=0.1.0",
+    "langchain-community>=0.0.30",
 ]
 
 [project.optional-dependencies]

@@ -17,3 +17,7 @@ class StorageService(ABC):
     @abstractmethod
     async def delete(self, collection: str, id: str) -> None:
         pass
+
+    @abstractmethod
+    async def list(self, collection: str, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        pass

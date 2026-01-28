@@ -1,6 +1,6 @@
 import os
 from google.cloud import firestore
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from app.services.storage_service import StorageService
 
 class FirestoreStorage(StorageService):
@@ -27,3 +27,17 @@ class FirestoreStorage(StorageService):
     async def delete(self, collection: str, id: str) -> None:
         doc_ref = self.db.collection(collection).document(id)
         doc_ref.delete()
+
+    async def list(self, collection: str, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        query = self.db.collection(collection)
+        
+        if filters:
+            for key, value in filters.items():
+                query = query.where(field_path=key, op_string="==", value=value)
+                
+        docs = query.stream()
+        results = []
+        for doc in docs:
+            data = doc.to_dict()
+            results.append(data)
+        return results
