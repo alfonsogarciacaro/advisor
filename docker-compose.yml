@@ -6,7 +6,6 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
       - FIRESTORE_EMULATOR_HOST=firestore-emulator:8080
-      - PUBSUB_EMULATOR_HOST=pubsub-emulator:8085
       - GCP_PROJECT_ID=finance-advisor
     volumes:
       - ./frontend:/app
@@ -24,12 +23,10 @@ services:
     environment:
       - GCP_PROJECT_ID=finance-advisor
       - FIRESTORE_EMULATOR_HOST=firestore-emulator:8080
-      - PUBSUB_EMULATOR_HOST=pubsub-emulator:8085
     volumes:
       - ./backend:/app
     depends_on:
       - firestore-emulator
-      - pubsub-emulator
     profiles:
       - app
 
@@ -41,16 +38,5 @@ services:
       - "8080:8080"
     environment:
       - FIRESTORE_PROJECT_ID=finance-advisor
-    profiles:
-      - emulators
-
-  pubsub-emulator:
-    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
-    # PubSub emulator needs to bind to 0.0.0.0
-    command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8085
-    ports:
-      - "8085:8085"
-    environment:
-      - PUBSUB_PROJECT_ID=finance-advisor
     profiles:
       - emulators

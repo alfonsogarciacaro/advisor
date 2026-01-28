@@ -16,17 +16,13 @@ jobs:
     # 1. Start Emulators using Docker Compose
     - name: Start Emulators
       run: |
-        docker compose up -d firestore-emulator pubsub-emulator
+        docker compose up -d firestore-emulator
         echo "Waiting for Firestore emulator to be ready..."
         timeout 90s bash -c 'until docker compose logs firestore-emulator 2>&1 | grep -q "Dev App Server is now running"; do sleep 2; done'
-        echo "Waiting for PubSub emulator to be ready..."
-        timeout 90s bash -c 'until docker compose logs pubsub-emulator 2>&1 | grep -q "Server started"; do sleep 2; done'
         echo "Emulators are fully initialized!"
         docker compose ps
         echo "--- Firestore Logs ---"
         docker compose logs firestore-emulator
-        echo "--- PubSub Logs ---"
-        docker compose logs pubsub-emulator
 
     # 2. Set up Backend
     - name: Set up Python
@@ -46,7 +42,6 @@ jobs:
       working-directory: ./backend
       env:
         FIRESTORE_EMULATOR_HOST: localhost:8080
-        PUBSUB_EMULATOR_HOST: localhost:8085
         GCP_PROJECT_ID: finance-advisor
       run: |
         uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
