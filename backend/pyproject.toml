@@ -47,3 +47,9 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+# Ignore all warnings (e.g. from site-packages) except for our own code
+filterwarnings = [
+    "ignore",
+    "default:::app",
+    "default:::tests",
+]

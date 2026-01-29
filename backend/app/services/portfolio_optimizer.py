@@ -10,6 +10,7 @@ from app.services.config_service import ConfigService
 from app.services.storage_service import StorageService
 from app.services.logger_service import LoggerService
 from app.models.portfolio import OptimizationResult, PortfolioAsset, EfficientFrontierPoint, ScenarioForecast
+from app.models.plan import PortfolioConstraints
 from app.core.utils import sanitize_numpy
 
 class PortfolioOptimizerService:
@@ -34,10 +35,35 @@ class PortfolioOptimizerService:
         self.risk_calculator = risk_calculator
         self.collection = "optimization_jobs"
 
-    async def start_optimization(self, amount: float, currency: str, excluded_tickers: List[str] = []) -> str:
-        """Starts the optimization process in the background."""
+    async def start_optimization(
+        self,
+        amount: float,
+        currency: str,
+        excluded_tickers: List[str] = [],
+        plan_id: Optional[str] = None
+    ) -> str:
+        """
+        Starts the optimization process in the background.
+
+        Args:
+            amount: Investment amount
+            currency: Currency code
+            excluded_tickers: Tickers to exclude from optimization
+            plan_id: Optional plan ID to load constraints from
+        """
         job_id = str(uuid.uuid4())
-        
+
+        # Load constraints from plan if provided
+        constraints = None
+        if plan_id and self.storage_service:
+            try:
+                plan_data = await self.storage_service.get("plans", plan_id)
+                if plan_data and plan_data.get("constraints"):
+                    # Convert dict back to PortfolioConstraints
+                    constraints = PortfolioConstraints(**plan_data["constraints"])
+            except Exception as e:
+                self.logger.warning(f"Could not load constraints from plan {plan_id}: {e}")
+
         initial_job_state = OptimizationResult(
             job_id=job_id,
             status="queued",
@@ -45,19 +71,28 @@ class PortfolioOptimizerService:
             initial_amount=amount,
             currency=currency
         )
-        
+
         await self.storage_service.save(self.collection, job_id, sanitize_numpy(initial_job_state.model_dump()))
-        
+
         self.logger.info(f"Queuing optimization job {job_id} for amount {amount} {currency}")
-        
+
         # Fire and forget task
-        asyncio.create_task(self._run_optimization(job_id, amount, currency, excluded_tickers))
+        asyncio.create_task(self._run_optimization(job_id, amount, currency, excluded_tickers, constraints))
         
         return job_id
 
-    async def _run_optimization(self, job_id: str, amount: float, currency: str, excluded_tickers: List[str]):
+    async def _run_optimization(
+        self,
+        job_id: str,
+        amount: float,
+        currency: str,
+        excluded_tickers: List[str],
+        constraints: Optional[PortfolioConstraints] = None
+    ):
         try:
             self.logger.info(f"Starting optimization job {job_id}")
+            if constraints:
+                self.logger.info(f"Constraints applied: {constraints}")
             # Update status
             await self._update_job_status(job_id, "fetching_data")
 
@@ -171,9 +206,14 @@ class PortfolioOptimizerService:
             # We will subtract estimated commission from the 'amount' to show 'Net Investment'.
             
             await self._update_job_status(job_id, "optimizing")
-            
-            # 5. Run MVO
-            frontier, optimal = self._calculate_mean_variance(expected_annual_returns, cov_matrix)
+
+            # 5. Run MVO (with or without constraints)
+            if constraints:
+                frontier, optimal = self._calculate_mean_variance_constrained(
+                    expected_annual_returns, cov_matrix, constraints
+                )
+            else:
+                frontier, optimal = self._calculate_mean_variance(expected_annual_returns, cov_matrix)
             
             # 6. Format Result
             # Convert optimal weights to PortfolioAssets
@@ -249,16 +289,22 @@ class PortfolioOptimizerService:
 
             # 9. Generate LLM Report
             if self.llm_service:
-                llm_report = await self._generate_llm_report(
+                llm_result = await self._generate_llm_report(
                     amount=amount,
                     currency=currency,
                     optimal_assets=optimal_assets,
                     metrics=metrics_dict,
                     scenarios=scenarios
                 )
-                
-                if llm_report:
-                    final_job_state.llm_report = llm_report
+
+                if llm_result:
+                    # Store the report in llm_report
+                    final_job_state.llm_report = llm_result.get("report", "")
+                    # Store follow_up_suggestions in metrics for later access
+                    metrics_dict["follow_up_suggestions"] = llm_result.get("follow_up_suggestions", [])
+                    # Store constraint_suggestions if present
+                    if "constraint_suggestions" in llm_result:
+                        metrics_dict["constraint_suggestions"] = llm_result.get("constraint_suggestions", [])
             
             # Final completion update
             final_job_state.status = "completed"
@@ -276,6 +322,113 @@ class PortfolioOptimizerService:
                 "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
             }
             await self.storage_service.save(self.collection, job_id, sanitize_numpy(error_state))
+
+    def _generate_trajectory(self, amount: float, annual_ret: float, months: int = 60) -> List[Dict[str, Any]]:
+        """Generate a trajectory for scenario visualization."""
+        traj = []
+        start_date = datetime.datetime.now(datetime.timezone.utc)
+        for i in range(months + 1):
+            date = start_date + datetime.timedelta(days=30*i)
+            val = amount * ((1 + annual_ret) ** (i / 12))
+            traj.append({
+                "date": date.isoformat(),
+                "value": val
+            })
+        return traj
+
+    async def _generate_llm_scenarios(
+        self,
+        optimal_weights: Dict[str, float],
+        investable_amount: float,
+        valid_tickers: List[str],
+        expected_annual_returns: pd.Series,
+        cov_matrix: pd.DataFrame
+    ) -> Optional[List[ScenarioForecast]]:
+        """Generate LLM-powered scenarios with context about the portfolio."""
+        import json
+
+        # Calculate portfolio-level metrics
+        portfolio_return = sum(optimal_weights[t] * expected_annual_returns[t] for t in valid_tickers if t in optimal_weights)
+
+        # Calculate portfolio volatility
+        portfolio_variance: float = 0
+        for i, t1 in enumerate(valid_tickers):
+            if t1 not in optimal_weights: continue
+            for j, t2 in enumerate(valid_tickers):
+                if t2 not in optimal_weights: continue
+                portfolio_variance += optimal_weights[t1] * optimal_weights[t2] * cov_matrix.iloc[i, j]  # type: ignore
+        portfolio_volatility = np.sqrt(portfolio_variance)
+
+        # Build context for LLM
+        portfolio_context = {
+            "total_investment": f"{investable_amount:.2f}",
+            "expected_annual_return": f"{portfolio_return:.2%}",
+            "annual_volatility": f"{portfolio_volatility:.2%}",
+            "num_holdings": len(optimal_weights),
+            "top_holdings": [
+                {"ticker": t, "weight": f"{w:.1%}", "expected_return": f"{expected_annual_returns[t]:.2%}"}
+                for t, w in sorted(optimal_weights.items(), key=lambda x: x[1], reverse=True)[:5]
+            ]
+        }
+
+        prompt = f"""You are a financial analyst specializing in portfolio scenario analysis for long-term, risk-conscious investors.
+
+Given the following optimized portfolio:
+
+{json.dumps(portfolio_context, indent=2)}
+
+Generate 3 scenarios (Base Case, Bull Case, Bear Case) for the next 12 months. For each scenario provide:
+1. name: "Base Case", "Bull Case", or "Bear Case"
+2. probability: Weight (must sum to 1.0)
+3. description: Clear explanation of the market conditions (2-3 sentences)
+4. annual_return_adjustment: e.g., 0.05 for +5%, -0.03 for -3%
+5. volatility_adjustment: e.g., 0.2 for +20% volatility, -0.1 for -10%
+
+Keep scenarios realistic for a diversified ETF portfolio. The investor is long-term focused with moderate risk tolerance.
+
+Return JSON only with this structure:
+{{
+  "scenarios": [
+    {{
+      "name": "Base Case",
+      "probability": 0.6,
+      "description": "...",
+      "annual_return_adjustment": 0.0,
+      "volatility_adjustment": 0.0
+    }},
+    ...
+  ]
+}}
+"""
+
+        try:
+            response = await self.llm_service.generate_json(prompt)
+            scenarios_data = response.get("scenarios", [])
+
+            if not scenarios_data:
+                return None
+
+            # Convert to ScenarioForecast objects
+            scenarios = []
+            for s in scenarios_data:
+                adj_return = portfolio_return * (1 + s.get("annual_return_adjustment", 0))
+                adj_vol = portfolio_volatility * (1 + s.get("volatility_adjustment", 0))
+
+                scenarios.append(ScenarioForecast(
+                    name=s.get("name", "Scenario"),
+                    probability=s.get("probability", 0.33),
+                    description=s.get("description", ""),
+                    expected_portfolio_value=investable_amount * (1 + adj_return),
+                    expected_return=adj_return,
+                    annual_volatility=adj_vol,
+                    trajectory=self._generate_trajectory(investable_amount, adj_return)
+                ))
+
+            return scenarios
+
+        except Exception as e:
+            self.logger.error(f"Error generating LLM scenarios: {e}")
+            return None
 
     async def _update_job_status(self, job_id: str, status: str):
         # Fetch current, update status, save
@@ -316,6 +469,245 @@ class PortfolioOptimizerService:
             total_returns[ticker] -= expense_ratios.get(ticker, 0.0)
 
         return total_returns
+
+    def _build_optimization_constraints(
+        self,
+        num_assets: int,
+        tickers: List[str],
+        constraints: Optional['PortfolioConstraints'] = None
+    ) -> tuple:
+        """
+        Build optimization constraints and bounds based on user input.
+
+        Returns:
+            (constraints_list, bounds_list)
+        """
+        # Start with basic constraint: weights sum to 1
+        constraints_list = [{'type': 'eq', 'fun': lambda x: np.sum(x) - 1}]
+        bounds_list = tuple((0.0, 1.0) for _ in range(num_assets))
+
+        if not constraints:
+            return constraints_list, bounds_list
+
+        # Apply max asset weight constraint
+        if constraints.max_asset_weight is not None:
+            bounds_list = tuple((0.0, constraints.max_asset_weight) for _ in range(num_assets))
+
+        # Handle excluded assets
+        if constraints.excluded_assets:
+            for i, ticker in enumerate(tickers):
+                if ticker in constraints.excluded_assets:
+                    bounds_list = list(bounds_list)
+                    bounds_list[i] = (0.0, 0.0)  # Force 0 weight
+                    bounds_list = tuple(bounds_list)
+
+        # Apply sector constraints if we have sector mapping
+        if constraints.sector_constraints and self.config_service:
+            try:
+                sector_map = self.config_service.get_sector_mapping()
+                if sector_map:
+                    for sector, limits in constraints.sector_constraints.items():
+                        # Find tickers in this sector
+                        sector_indices = [
+                            i for i, ticker in enumerate(tickers)
+                            if sector_map.get(ticker) == sector
+                        ]
+
+                        if sector_indices:
+                            # Max constraint for sector
+                            if 'max' in limits:
+                                constraints_list.append({
+                                    'type': 'ineq',
+                                    'fun': lambda x, idx=sector_indices: limits['max'] - np.sum(x[idx])
+                                })
+
+                            # Min constraint for sector
+                            if 'min' in limits:
+                                constraints_list.append({
+                                    'type': 'ineq',
+                                    'fun': lambda x, idx=sector_indices: np.sum(x[idx]) - limits['min']
+                                })
+            except Exception as e:
+                self.logger.warning(f"Could not apply sector constraints: {e}")
+
+        # Apply max volatility constraint
+        if constraints.max_volatility is not None:
+            # This requires a more complex approach as it's not linear
+            # For now, we'll handle it post-optimization (filter results)
+            pass
+
+        return constraints_list, bounds_list
+
+    def _filter_small_positions(
+        self,
+        weights: Dict[str, float],
+        min_position_size: float = 0.01
+    ) -> Dict[str, float]:
+        """Filter out positions below minimum size and re-normalize."""
+        filtered = {k: v for k, v in weights.items() if v >= min_position_size}
+
+        if not filtered:
+            return weights
+
+        # Re-normalize to sum to 1
+        total = sum(filtered.values())
+        return {k: v / total for k, v in filtered.items()}
+
+    def _calculate_mean_variance_constrained(
+        self,
+        mean_returns: pd.Series,
+        cov_matrix: pd.DataFrame,
+        constraints: Optional['PortfolioConstraints'] = None
+    ) -> Tuple[List[EfficientFrontierPoint], Dict[str, Any]]:
+        """
+        Calculate efficient frontier with user-specified constraints.
+
+        This is the constrained version of _calculate_mean_variance that supports:
+        - Max asset weight (e.g., no more than 20% in any single asset)
+        - Excluded assets
+        - Sector constraints (max/min per sector)
+        - Minimum position size
+        - Min/max holdings
+        """
+        num_assets = len(mean_returns)
+        args = (mean_returns.values, cov_matrix.values)
+        tickers = mean_returns.index.tolist()
+        risk_free_rate = 0.04  # TODO: Config
+
+        # Build constraints and bounds
+        constraints_list, bounds_list = self._build_optimization_constraints(
+            num_assets, tickers, constraints
+        )
+
+        def portfolio_volatility(weights, mean_returns, cov_matrix):
+            return np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
+
+        def portfolio_return(weights, mean_returns, cov_matrix):
+            return np.sum(mean_returns * weights)
+
+        def neg_sharpe_ratio(weights, mean_returns, cov_matrix):
+            p_ret = portfolio_return(weights, mean_returns, cov_matrix)
+            p_vol = portfolio_volatility(weights, mean_returns, cov_matrix)
+            return -(p_ret - risk_free_rate) / p_vol
+
+        # 1. Max Sharpe Ratio with constraints
+        result_max_sharpe = sco.minimize(
+            neg_sharpe_ratio,
+            num_assets * [1./num_assets],
+            args=args,
+            method='SLSQP',
+            bounds=bounds_list,
+            constraints=constraints_list
+        )
+
+        if not result_max_sharpe.success:
+            self.logger.warning(f"Constrained optimization failed: {result_max_sharpe.message}")
+            # Fall back to unconstrained
+            return self._calculate_mean_variance(mean_returns, cov_matrix)
+
+        # Apply min position size filter
+        max_sharpe_weights = dict(zip(tickers, result_max_sharpe.x))
+        if constraints:
+            max_sharpe_weights = self._filter_small_positions(
+                max_sharpe_weights,
+                constraints.min_position_size
+            )
+
+        # Check min/max holdings constraint
+        num_holdings = len(max_sharpe_weights)
+        if constraints:
+            if num_holdings < constraints.min_holdings:
+                self.logger.warning(
+                    f"Optimization only has {num_holdings} holdings, "
+                    f"minimum required is {constraints.min_holdings}. "
+                    "Consider relaxing constraints."
+                )
+            elif num_holdings > constraints.max_holdings:
+                # Keep only top holdings
+                sorted_items = sorted(
+                    max_sharpe_weights.items(),
+                    key=lambda x: x[1],
+                    reverse=True
+                )
+                max_sharpe_weights = dict(sorted_items[:constraints.max_holdings])
+                # Re-normalize
+                total = sum(max_sharpe_weights.values())
+                max_sharpe_weights = {k: v / total for k, v in max_sharpe_weights.items()}
+
+        max_sharpe_ret = portfolio_return(
+            list(max_sharpe_weights.values()),
+            mean_returns.values,
+            cov_matrix.values
+        )
+        max_sharpe_vol = portfolio_volatility(
+            list(max_sharpe_weights.values()),
+            mean_returns.values,
+            cov_matrix.values
+        )
+
+        optimal_portfolio = {
+            "annual_return": max_sharpe_ret,
+            "annual_volatility": max_sharpe_vol,
+            "sharpe_ratio": (max_sharpe_ret - risk_free_rate) / max_sharpe_vol,
+            "weights": max_sharpe_weights
+        }
+
+        # 2. Efficient Frontier with constraints
+        def volatility_fun(weights, mean_returns, cov_matrix):
+            return portfolio_volatility(weights, mean_returns, cov_matrix)
+
+        result_min_vol = sco.minimize(
+            volatility_fun,
+            num_assets * [1./num_assets],
+            args=args,
+            method='SLSQP',
+            bounds=bounds_list,
+            constraints=constraints_list
+        )
+
+        min_ret = portfolio_return(result_min_vol.x, mean_returns.values, cov_matrix.values)
+        max_ret = mean_returns.max()
+
+        target_returns = np.linspace(min_ret, max_ret, 20)
+        efficient_frontier = []
+
+        for target in target_returns:
+            constraints_ef = [
+                {'type': 'eq', 'fun': lambda x: np.sum(x) - 1},
+                {'type': 'eq', 'fun': lambda x: portfolio_return(x, mean_returns.values, cov_matrix.values) - target}
+            ]
+
+            result = sco.minimize(
+                volatility_fun,
+                num_assets * [1./num_assets],
+                args=args,
+                method='SLSQP',
+                bounds=bounds_list,
+                constraints=constraints_ef
+            )
+
+            if result.success:
+                vol = result.fun
+                ret = target
+                sharpe = (ret - risk_free_rate) / vol
+                weights = dict(zip(tickers, result.x))
+
+                # Apply min position filter
+                if constraints:
+                    weights = self._filter_small_positions(
+                        weights,
+                        constraints.min_position_size
+                    )
+
+                point = EfficientFrontierPoint(
+                    annual_volatility=vol,
+                    annual_return=ret,
+                    sharpe_ratio=sharpe,
+                    weights=weights
+                )
+                efficient_frontier.append(point)
+
+        return efficient_frontier, optimal_portfolio
 
     def _calculate_mean_variance(self, mean_returns: pd.Series, cov_matrix: pd.DataFrame) -> Tuple[List[EfficientFrontierPoint], Dict[str, Any]]:
         num_assets = len(mean_returns)
@@ -404,8 +796,25 @@ class PortfolioOptimizerService:
         expected_annual_returns: pd.Series,
         cov_matrix: pd.DataFrame
     ) -> List[ScenarioForecast]:
-        """Generate scenario-based forecasts for the optimal portfolio."""
+        """
+        Generate scenario-based forecasts for the optimal portfolio.
+
+        Uses LLM-powered scenario generation if available, otherwise falls back
+        to hardcoded scenarios.
+        """
         scenarios = []
+
+        # Try to use LLM for scenario generation if available
+        if self.llm_service:
+            try:
+                llm_scenarios = await self._generate_llm_scenarios(
+                    optimal_weights, investable_amount, valid_tickers,
+                    expected_annual_returns, cov_matrix
+                )
+                if llm_scenarios:
+                    return llm_scenarios
+            except Exception as e:
+                self.logger.warning(f"LLM scenario generation failed, using fallback: {e}")
 
         # Base case - use the expected returns as-is
         base_return = sum(optimal_weights[t] * expected_annual_returns[t] for t in valid_tickers if t in optimal_weights)
@@ -478,8 +887,14 @@ class PortfolioOptimizerService:
         optimal_assets: List[PortfolioAsset],
         metrics: Dict[str, float],
         scenarios: List[ScenarioForecast]
-    ) -> Optional[str]:
-        """Generate an LLM-powered analysis report for the portfolio."""
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Generate an LLM-powered analysis report for the portfolio.
+
+        Returns a dict containing:
+        - report: The main analysis report
+        - follow_up_suggestions: List of suggested follow-up research questions
+        """
         if not self.llm_service:
             return None
 
@@ -513,18 +928,81 @@ class PortfolioOptimizerService:
             ]
         }
 
-        prompt = f"""You are a financial advisor providing a portfolio analysis report. Analyze the following optimized portfolio:
+        # Check for concentration issues to potentially suggest constraints
+        max_weight = max([a.weight for a in optimal_assets]) if optimal_assets else 0
+        num_holdings = len(optimal_assets)
+        concentration_warning = max_weight > 0.25 or num_holdings < 5
+
+        # Determine if we should suggest constraints
+        suggest_constraints = max_weight > 0.25 or num_holdings < 5 or metrics.get('annual_volatility', 0) > 0.15
+
+        # Build prompt sections conditionally
+        prompt_intro = f"""You are a financial advisor providing a portfolio analysis report for a long-term, risk-conscious investor.
 
 Portfolio Summary:
 {json.dumps(portfolio_summary, indent=2)}
 
-Please provide a concise report (3-4 paragraphs) covering:
-1. Portfolio Overview - Brief summary of the allocation strategy
-2. Risk Analysis - Assessment of volatility and diversification
-3. Return Expectations - Analysis of expected returns under different scenarios
-4. Recommendations - Key considerations for the investor
+Please provide:
 
-Keep the tone professional yet accessible. Use markdown formatting for readability."""
+1. A concise report (3-4 paragraphs) covering:
+   - Portfolio Overview - Brief summary of the allocation strategy
+   - Risk Analysis - Assessment of volatility and diversification
+   - Return Expectations - Analysis of expected returns under different scenarios
+   - Recommendations - Key considerations for the investor
+
+2. Three to four suggested follow-up research questions that would help the investor better understand this portfolio. Each question should:
+   - Be specific and actionable
+   - Address a potential concern or area for deeper analysis
+   - Be answerable through quantitative analysis or research
+"""
+
+        prompt_constraints = """
+3. (Only if issues detected) Constraint Suggestions: If the portfolio has:
+   - Any single asset >25% concentration
+   - Fewer than 5 holdings
+   - Volatility >15%
+   Suggest 1-2 specific constraints to improve it. For each:
+   - type: "asset" (max single asset), "diversification" (min holdings), or "sector" (sector cap)
+   - description: Clear explanation
+   - specific_value: e.g., 0.20 for max 20% weight
+
+Add to JSON: "constraint_suggestions": [{"type": "...", "description": "...", "specific_value": ...}]
+"""
+
+        prompt_format = """
+Format your response as JSON:
+{
+  "report": "Your markdown-formatted report here...",
+  "follow_up_suggestions": [
+    "Question 1",
+    "Question 2",
+    "Question 3",
+    "Question 4 (optional)"
+  ]
+}
+"""
+
+        if suggest_constraints:
+            prompt_format = """
+Format your response as JSON:
+{
+  "report": "Your markdown-formatted report here...",
+  "follow_up_suggestions": [
+    "Question 1",
+    "Question 2",
+    "Question 3",
+    "Question 4 (optional)"
+  ],
+  "constraint_suggestions": [
+    {"type": "asset|diversification|sector", "description": "...", "specific_value": 0.20}
+  ]
+}
+"""
+
+        prompt = prompt_intro + (prompt_constraints if suggest_constraints else "") + prompt_format + """
+
+Keep the tone professional yet accessible. Use markdown formatting for the report.
+"""
 
         try:
             # Create tools if dependencies are available
@@ -538,8 +1016,116 @@ Keep the tone professional yet accessible. Use markdown formatting for readabili
                     self.macro_service
                 )
 
-            report = await self.llm_service.generate_response(prompt, use_cache=True, tools=tools)
-            return report
+            response = await self.llm_service.generate_json(prompt, use_cache=True, tools=tools)
+            result = {
+                "report": response.get("report", ""),
+                "follow_up_suggestions": response.get("follow_up_suggestions", [])
+            }
+
+            # Include constraint suggestions if they exist
+            if "constraint_suggestions" in response:
+                result["constraint_suggestions"] = response.get("constraint_suggestions", [])
+            # If LLM didn't provide them but issues exist, generate them separately
+            elif suggest_constraints:
+                optimal_weights = {a.ticker: a.weight for a in optimal_assets}
+                constraint_suggestions = await self._generate_constraint_suggestions(
+                    optimal_weights, metrics, scenarios
+                )
+                if constraint_suggestions:
+                    result["constraint_suggestions"] = constraint_suggestions
+
+            return result
         except Exception as e:
             self.logger.error(f"Failed to generate LLM report: {e}")
             return None
+
+    async def _generate_constraint_suggestions(
+        self,
+        optimal_weights: Dict[str, float],
+        metrics: Dict[str, float],
+        scenarios: List[ScenarioForecast]
+    ) -> List[Dict[str, Any]]:
+        """
+        Ask LLM to suggest portfolio constraints if optimization has issues.
+
+        Detects common portfolio problems and suggests specific constraints.
+        """
+        import json
+
+        issues = []
+        suggestions = []
+
+        # Check for concentration issues
+        max_weight = max(optimal_weights.values()) if optimal_weights else 0
+        if max_weight > 0.30:
+            # Find the ticker with max weight
+            max_ticker = max(optimal_weights.keys(), key=lambda k: optimal_weights[k]) if optimal_weights else "Unknown"
+            issues.append(f"Highest concentration: {max_weight:.1%} in {max_ticker}")
+
+        # Check for low diversification
+        num_holdings = len(optimal_weights)
+        if num_holdings < 5:
+            issues.append(f"Only {num_holdings} holdings (too concentrated)")
+
+        # Check for extreme volatility
+        vol = metrics.get('annual_volatility', 0)
+        if vol > 0.20:
+            issues.append(f"High volatility: {vol:.1%}")
+
+        # If issues found and LLM available, generate suggestions
+        if issues and self.llm_service:
+            prompt = f"""
+You are a financial portfolio analyst. The following portfolio optimization has potential issues:
+
+{json.dumps({"issues": issues}, indent=2)}
+
+Current allocation:
+{json.dumps(optimal_weights, indent=2)}
+
+Key metrics:
+- Expected Annual Return: {metrics.get('expected_annual_return', 0) * 100:.1f}%
+- Annual Volatility: {metrics.get('annual_volatility', 0) * 100:.1f}%
+- Number of Holdings: {num_holdings}
+
+Suggest 2-3 specific constraints to improve this portfolio. For each constraint, provide:
+- type: One of "asset", "sector", "diversification"
+- description: Clear explanation of the constraint
+- specific_value: The actual value (e.g., 0.20 for 20% max weight)
+
+Focus on practical constraints that a long-term investor would understand.
+
+Return JSON only:
+{{
+  "constraint_suggestions": [
+    {{
+      "type": "asset",
+      "description": "Limit Gold allocation to 10% to reduce concentration risk",
+      "specific_value": 0.10
+    }},
+    {{
+      "type": "diversification",
+      "description": "Require minimum 5 holdings for better diversification",
+      "specific_value": 5
+    }}
+  ]
+}}
+"""
+
+            try:
+                response = await self.llm_service.generate_json(prompt, use_cache=False)
+                suggestions = response.get("constraint_suggestions", [])
+
+                # Add metadata
+                for s in suggestions:
+                    s['generated_at'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                    s['source'] = 'llm_analysis'
+
+                self.logger.info(f"Generated {len(suggestions)} constraint suggestions")
+                return suggestions
+
+            except Exception as e:
+                self.logger.error(f"Failed to generate constraint suggestions: {e}")
+        else:
+            self.logger.info("No optimization issues detected, no constraints needed")
+
+        return suggestions

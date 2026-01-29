@@ -1,8 +1,11 @@
 from contextlib import asynccontextmanager
+import os
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.api.news import router as news_router
 from app.api.agents import router as agents_router
 from app.api.portfolio import router as portfolio_router
+from app.api.plans import router as plans_router
 from app.core.logging import setup_logging
 
 @asynccontextmanager
@@ -12,9 +15,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="ETF Portfolio Advisor Backend", lifespan=lifespan)
 
+# CORS Configuration
+origins = os.getenv("CORS_ORIGINS", "*").split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(news_router, prefix="/api/news", tags=["news"])
 app.include_router(agents_router, prefix="/api/agents", tags=["agents"])
 app.include_router(portfolio_router, prefix="/api/portfolio", tags=["portfolio"])
+app.include_router(plans_router, prefix="/api", tags=["plans"])
 
 @app.get("/")
 def read_root():

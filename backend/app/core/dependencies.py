@@ -125,12 +125,48 @@ def get_portfolio_optimizer_service(
     from app.services.portfolio_optimizer import PortfolioOptimizerService
     logger = get_logger()
     return PortfolioOptimizerService(
-        history_service, 
-        config_service, 
-        storage_service, 
-        logger, 
-        forecasting_engine, 
+        history_service,
+        config_service,
+        storage_service,
+        logger,
+        forecasting_engine,
         llm_service,
         macro_service,
         risk_calculator
+    )
+
+
+@lru_cache()
+def get_plan_service(
+    storage_service: StorageService = Depends(get_storage_service),
+    config_service: ConfigService = Depends(get_config_service)
+) -> Any:
+    from app.services.plan_service import PlanService
+    logger = get_logger()
+    return PlanService(storage_service, logger, config_service)
+
+
+@lru_cache()
+def get_research_agent(
+    news_service: NewsService = Depends(get_news_service),
+    history_service: HistoryService = Depends(get_history_service),
+    llm_service: Any = Depends(get_llm_service),
+    forecasting_engine: Any = Depends(get_forecasting_engine),
+    macro_service: Any = Depends(get_macro_service),
+    risk_calculator: Any = Depends(get_risk_calculator),
+    config_service: ConfigService = Depends(get_config_service)
+) -> Any:
+    from app.services.research_agent import ResearchAgent
+    logger = get_logger()
+    storage = get_storage_service()
+    return ResearchAgent(
+        logger=logger,
+        storage=storage,
+        news_service=news_service,
+        history_service=history_service,
+        llm_service=llm_service,
+        forecasting_engine=forecasting_engine,
+        macro_service=macro_service,
+        risk_calculator=risk_calculator,
+        config_service=config_service
     )

@@ -1,3 +1,5 @@
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 export interface NewsItem {
     title: string;
     summary: string;
@@ -34,7 +36,7 @@ export interface AgentRunStatus {
 // News API
 export async function getLatestNews(): Promise<NewsItem[]> {
     try {
-        const response = await fetch('/api/news');
+        const response = await fetch(`${API_BASE_URL}/api/news`);
         if (!response.ok) {
             throw new Error('Failed to fetch news');
         }
@@ -47,7 +49,7 @@ export async function getLatestNews(): Promise<NewsItem[]> {
 
 // Agent API
 export async function runAgent(agentName: string, input: any): Promise<AgentRunResponse> {
-    const response = await fetch(`/api/agents/${agentName}/run`, {
+    const response = await fetch(`${API_BASE_URL}/api/agents/${agentName}/run`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -64,7 +66,7 @@ export async function runAgent(agentName: string, input: any): Promise<AgentRunR
 }
 
 export async function getRunStatus(runId: string): Promise<AgentRunStatus> {
-    const response = await fetch(`/api/agents/runs/${runId}`);
+    const response = await fetch(`${API_BASE_URL}/api/agents/runs/${runId}`);
 
     if (!response.ok) {
         const error = await response.json();
@@ -75,7 +77,7 @@ export async function getRunStatus(runId: string): Promise<AgentRunStatus> {
 }
 
 export async function getRunLogs(runId: string): Promise<AgentLog[]> {
-    const response = await fetch(`/api/agents/runs/${runId}/logs`);
+    const response = await fetch(`${API_BASE_URL}/api/agents/runs/${runId}/logs`);
 
     if (!response.ok) {
         const error = await response.json();
@@ -129,7 +131,7 @@ export interface OptimizationResult {
 }
 
 export async function optimizePortfolio(amount: number, currency: string): Promise<{ job_id: string; status: string }> {
-    const response = await fetch('/api/portfolio/optimize', {
+    const response = await fetch(`${API_BASE_URL}/api/portfolio/optimize`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -146,7 +148,7 @@ export async function optimizePortfolio(amount: number, currency: string): Promi
 }
 
 export async function getOptimizationStatus(jobId: string): Promise<OptimizationResult> {
-    const response = await fetch(`/api/portfolio/optimize/${jobId}`);
+    const response = await fetch(`${API_BASE_URL}/api/portfolio/optimize/${jobId}`);
 
     if (!response.ok) {
         const error = await response.json();
@@ -157,7 +159,7 @@ export async function getOptimizationStatus(jobId: string): Promise<Optimization
 }
 
 export async function clearOptimizationCache(jobId?: string): Promise<{ message: string; jobs_cleared: number }> {
-    const url = jobId ? `/api/portfolio/optimize/cache?job_id=${jobId}` : '/api/portfolio/optimize/cache';
+    const url = jobId ? `${API_BASE_URL}/api/portfolio/optimize/cache?job_id=${jobId}` : `${API_BASE_URL}/api/portfolio/optimize/cache`;
     const response = await fetch(url, {
         method: 'DELETE',
     });
@@ -165,6 +167,176 @@ export async function clearOptimizationCache(jobId?: string): Promise<{ message:
     if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Failed to clear cache');
+    }
+
+    return response.json();
+}
+
+// ==================== Plan Management API ====================
+
+export type RiskProfile = 'very_conservative' | 'conservative' | 'moderate' | 'growth' | 'aggressive';
+
+export type TaxAccountType = 'taxable' | 'nisa_general' | 'nisa_growth' | 'ideco' | 'dc_pension' | 'other';
+
+export interface TaxAccount {
+    account_type: TaxAccountType;
+    name: string;
+    annual_limit?: number | null;
+    current_balance: number;
+    available_space: number;
+    withdrawal_rules?: string | null;
+    dividend_tax_rate: number;
+    capital_gains_tax_rate: number;
+    contribution_deductible: boolean;
+}
+
+export interface RecurringInvestment {
+    enabled: boolean;
+    frequency: 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
+    amount: number;
+    currency: string;
+    dividend_reinvestment: boolean;
+    next_investment_date?: string | null;
+}
+
+export interface ResearchRun {
+    run_id: string;
+    timestamp: string;
+    query: string;
+    result_summary: string;
+    scenarios?: any[] | null;
+    refined_forecasts?: any | null;
+    follow_up_suggestions?: string[] | null;
+}
+
+export interface Plan {
+    plan_id: string;
+    user_id: string;
+    name: string;
+    description?: string | null;
+    created_at: string;
+    updated_at: string;
+    risk_preference: RiskProfile;
+    initial_portfolio?: any[] | null;
+    initial_amount?: number | null;
+    optimization_result?: OptimizationResult | null;
+    recurring_investment?: RecurringInvestment | null;
+    tax_accounts?: TaxAccount[] | null;
+    research_history: ResearchRun[];
+    notes?: string | null;
+}
+
+export interface PlanCreateRequest {
+    name: string;
+    description?: string;
+    risk_preference?: RiskProfile;
+    initial_portfolio?: any[];
+    initial_amount?: number;
+    currency?: string;
+    user_id?: string;
+}
+
+export interface PlanUpdateRequest {
+    name?: string;
+    description?: string;
+    notes?: string;
+    risk_preference?: RiskProfile;
+}
+
+export interface ResearchOnPlanRequest {
+    query: string;
+}
+
+export interface ResearchOnPlanResponse {
+    run_id: string;
+    summary: string;
+    scenarios: any[];
+    refined_forecasts: any;
+    follow_up_suggestions: string[] | null;
+}
+
+// Plan API Functions
+export async function createPlan(request: PlanCreateRequest): Promise<{ plan_id: string; status: string }> {
+    const response = await fetch(`${API_BASE_URL}/api/plans`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || error.error || 'Failed to create plan');
+    }
+
+    return response.json();
+}
+
+export async function listPlans(userId: string = 'default'): Promise<Plan[]> {
+    const response = await fetch(`${API_BASE_URL}/api/plans?user_id=${encodeURIComponent(userId)}`);
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || error.error || 'Failed to list plans');
+    }
+
+    return response.json();
+}
+
+export async function getPlan(planId: string): Promise<Plan> {
+    const response = await fetch(`${API_BASE_URL}/api/plans/${planId}`);
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || error.error || 'Failed to get plan');
+    }
+
+    return response.json();
+}
+
+export async function updatePlan(planId: string, request: PlanUpdateRequest): Promise<{ plan_id: string; status: string }> {
+    const response = await fetch(`${API_BASE_URL}/api/plans/${planId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || error.error || 'Failed to update plan');
+    }
+
+    return response.json();
+}
+
+export async function deletePlan(planId: string): Promise<{ plan_id: string; status: string }> {
+    const response = await fetch(`${API_BASE_URL}/api/plans/${planId}`, {
+        method: 'DELETE',
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || error.error || 'Failed to delete plan');
+    }
+
+    return response.json();
+}
+
+export async function runResearchOnPlan(planId: string, request: ResearchOnPlanRequest): Promise<ResearchOnPlanResponse> {
+    const response = await fetch(`${API_BASE_URL}/api/plans/${planId}/research`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || error.error || 'Failed to run research');
     }
 
     return response.json();

@@ -23,15 +23,18 @@ class AgentState(TypedDict):
     simulations: Dict[str, Any] # Legacy field, kept for compatibility if needed
     summary: str
     confidence_level: str
+    # Plan context for running research on existing portfolios
+    plan_context: Optional[Dict[str, Any]]  # Contains existing allocation, risk profile, etc.
 
 class ResearchAgent(LangGraphAgent):
     def __init__(self, logger: LoggerService, storage: StorageService,
                  news_service: Any = None, history_service: Any = None,
                  llm_service: Any = None,
                  forecasting_engine: Any = None,
-                 macro_service: Any = None, 
+                 macro_service: Any = None,
                  risk_calculator: Any = None,
-                 config_service: Any = None):
+                 config_service: Any = None,
+                 web_search_tool: Any = None):
         super().__init__(logger, storage)
         self.news_service = news_service
         self.history_service = history_service
@@ -40,6 +43,7 @@ class ResearchAgent(LangGraphAgent):
         self.macro_service = macro_service
         self.risk_calculator = risk_calculator
         self.config_service = config_service or ConfigService()
+        self.web_search_tool = web_search_tool  # Placeholder for future web search integration
 
     def search_node(self, state: AgentState) -> Dict[str, Any]:
         # In a real agent, this would call a search tool (e.g. Tavily, Google)
@@ -116,17 +120,24 @@ class ResearchAgent(LangGraphAgent):
         query = state.get("query", "")
         market_regime = state.get("market_regime", {})
         macro = state.get("macro_indicators", {})
-        
+        plan_context = state.get("plan_context", {})
+
         # Construct prompt for LLM
         prompt = f"""
-        You are a financial analyst. Based on the following context, generate 3 specific market scenarios 
+        You are a financial analyst. Based on the following context, generate 3 specific market scenarios
         (Base Case, Bull Case, Bear Case) for the requested analysis.
-        
+
         User Query: "{query}"
-        
+
         Market Regime: {json.dumps(market_regime, indent=2)}
         Macro Indicators: {json.dumps(macro, indent=2)}
-        
+        """
+
+        # Add plan context if available
+        if plan_context:
+            prompt += f"\nCurrent Portfolio Context: {json.dumps(plan_context, indent=2)}\n"
+
+        prompt += """
         For each scenario, provide:
         1. A weight (probability) - must sum to 1.0
         2. 'drift_adj': A drift adjustment factor (e.g. 0.05 for +5% annual return boost, -0.05 for -5%)
@@ -136,10 +147,17 @@ class ResearchAgent(LangGraphAgent):
         Format strictly as JSON with keys: "scenarios" -> Ticker -> Case Name.
         Use "GLOBAL" as ticker key if scenarios apply to all assets, or specific tickers like "SPY" if specific.
         """
-        
+
+        # Prepare tools if available
+        tools = None
+        if self.web_search_tool:
+            # In the future, web search tool will be passed to LLM for current market context
+            tools = [self.web_search_tool]
+            self.logger.info("Web search tool available for scenario analysis")
+
         try:
-            # Call LLM Service
-            response_json = await self.llm_service.generate_json(prompt)
+            # Call LLM Service with tools
+            response_json = await self.llm_service.generate_json(prompt, tools=tools)
             return {"scenarios": response_json.get("scenarios", {})}
         except Exception as e:
             self.logger.error(f"Error generating scenarios with LLM: {e}")
@@ -370,6 +388,11 @@ class ResearchAgent(LangGraphAgent):
                 "risk_metrics": {},
                 "simulations": {},
                 "summary": "",
-                "confidence_level": "medium"
+                "confidence_level": "medium",
+                "plan_context": None
             }
+        # If input_data is a dict with plan_context, ensure it's included
+        elif isinstance(input_data, dict):
+            if "plan_context" not in input_data:
+                input_data["plan_context"] = None
         return input_data

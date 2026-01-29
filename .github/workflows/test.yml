@@ -38,23 +38,13 @@ jobs:
       run: |
         uv sync --extra dev
 
-    - name: Start Backend
-      working-directory: ./backend
-      env:
-        FIRESTORE_EMULATOR_HOST: localhost:8080
-        GCP_PROJECT_ID: finance-advisor
-      run: |
-        uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend.log 2>&1 &
-        echo "Backend starting..."
-        sleep 10 # Give it more time
-
     - name: Run Backend Tests
       working-directory: ./backend
       env:
         FIRESTORE_EMULATOR_HOST: localhost:8080
         GCP_PROJECT_ID: finance-advisor
       run: |
-        uv run pytest tests/test_endpoints.py
+        uv run pytest tests/test_endpoints.py -v
 
     # 3. Set up Frontend & Run Tests
     - name: Set up Node.js
@@ -74,7 +64,7 @@ jobs:
 
     - name: Run Playwright Tests
       working-directory: ./frontend
-      run: npx playwright test
+      run: npm test
       env:
         CI: true
 

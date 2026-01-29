@@ -1,12 +1,17 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 from datetime import datetime
+
+if TYPE_CHECKING:
+    from app.models.plan import PortfolioConstraints
 
 class OptimizationRequest(BaseModel):
     amount: float = Field(..., gt=0, description="Investment amount")
     currency: str = Field(default="USD", description="Investment currency")
     risk_tolerance: Optional[float] = Field(None, ge=0, le=1, description="Risk tolerance (0-1), optional")
     excluded_tickers: Optional[List[str]] = Field(default=[], description="List of tickers to exclude from optimization")
+    plan_id: Optional[str] = Field(None, description="Plan ID to get constraints from")
+    constraints: Optional[Dict[str, Any]] = None  # Forward reference to PortfolioConstraints
 
 class PortfolioAsset(BaseModel):
     ticker: str

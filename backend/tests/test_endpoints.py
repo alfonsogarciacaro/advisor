@@ -1,69 +1,68 @@
 import pytest
+import os
+import datetime
 from httpx import AsyncClient, ASGITransport
 from app.main import app
-from app.core.dependencies import get_news_service, get_agent_service, get_portfolio_optimizer_service, get_storage_service
-from unittest.mock import AsyncMock, MagicMock
+from app.core.dependencies import (
+    get_news_service,
+    get_storage_service
+)
+# We will use real services for everything except News (external API) and LLM (external API)
+# LLM service automatically falls back to Mock if no API key is present, which we ensure in client fixture.
+from app.services.news_service import NewsService
+from app.services.news.mock_news_provider import MockNewsProvider
+from app.infrastructure.storage.firestore_storage import FirestoreStorage
 import uuid
-import datetime
 
-# Mock implementations
-@pytest.fixture
-def mock_news_service():
-    service = AsyncMock()
-    service.get_latest_news.return_value = [
-        {"title": "Test News 1", "summary": "Summary 1", "url": "http://example.com/1"},
-        {"title": "Test News 2", "summary": "Summary 2", "url": "http://example.com/2"}
-    ]
-    return service
+# Set environment variables for testing BEFORE any imports/fixtures that might use them
+os.environ["GCP_PROJECT_ID"] = "test-project"
+os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:8080"
+# Ensure no external API keys are set so LLMService uses MockLLMProvider
+if "GEMINI_API_KEY" in os.environ:
+    del os.environ["GEMINI_API_KEY"]
+if "OPENAI_API_KEY" in os.environ:
+    del os.environ["OPENAI_API_KEY"]
 
-@pytest.fixture
-def mock_agent_service():
-    service = AsyncMock()
-    service.create_run.return_value = "test-run-id"
-    service.get_run.return_value = {
-        "run_id": "test-run-id",
-        "status": "completed",
-        "agent": "research",
-        "result": "Test result"
-    }
-    service.get_run_logs.return_value = [
-        {"timestamp": "2024-01-01T00:00:00Z", "level": "INFO", "message": "Log 1"}
-    ]
-    return service
+# Helper to create a unique project id per test run if we wanted, 
+# but for emulator we can just use "test-project" and maybe clear data.
+# For simplicity, we assume the emulator is ephemeral or we tolerate data.
+# Ideally, we should delete data after tests, but let's stick to the plan.
 
 @pytest.fixture
-def mock_portfolio_service():
-    service = AsyncMock()
-    service.start_optimization.return_value = "test-job-id"
-    return service
+def storage():
+    # Helper to access storage directly for seeing data
+    return FirestoreStorage()
 
 @pytest.fixture
-def mock_storage_service():
-    service = AsyncMock()
-    service.get.return_value = {
-        "job_id": "test-job-id",
-        "status": "completed",
-        "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "initial_amount": 10000,
-        "currency": "USD",
-        "optimal_portfolio": [],
-        "metrics": {}
-    }
-    return service
-
-@pytest.fixture
-async def client(mock_news_service, mock_agent_service, mock_portfolio_service, mock_storage_service):
-    # Override dependencies
-    app.dependency_overrides[get_news_service] = lambda: mock_news_service
-    app.dependency_overrides[get_agent_service] = lambda: mock_agent_service
-    app.dependency_overrides[get_portfolio_optimizer_service] = lambda: mock_portfolio_service
-    app.dependency_overrides[get_storage_service] = lambda: mock_storage_service
+async def client(storage):
+    # Set environment variables for testing
     
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        yield ac
+    def override_get_news_service():
+        # Re-create dependencies
+        try:
+            # logger = app.dependency_overrides.get("get_logger", lambda: None)()
+            # Just use StdLogger directly or None to avoid complexity if get_logger isn't overridden yet
+            from app.infrastructure.logging.std_logger import StdLogger
+            logger = StdLogger()
+            provider = MockNewsProvider()
+            return NewsService(provider=provider, storage=storage, logger=logger, ttl_hours=12)
+        except Exception as e:
+            raise
+
+    app.dependency_overrides[get_news_service] = override_get_news_service
     
-    # Clear overrides after test
+    # Ensure real storage is used
+    app.dependency_overrides[get_storage_service] = lambda: storage
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            yield ac
+    except Exception as e:
+        raise
+
+    # Cleanup overrides
     app.dependency_overrides.clear()
+
 
 @pytest.mark.asyncio
 async def test_read_root(client):
@@ -72,35 +71,76 @@ async def test_read_root(client):
     assert response.json() == {"message": "Welcome to ETF Portfolio Advisor Backend"}
 
 @pytest.mark.asyncio
-async def test_get_news(client, mock_news_service):
+async def test_get_news(client):
+    # This tests the real NewsService flow:
+    # 1. Checks cache (Firestore) -> Empty first time
+    # 2. Calls Provider (MockNewsProvider)
+    # 3. Saves to cache
+    # 4. Returns news
+    
     response = await client.get("/api/news")
     assert response.status_code == 200
-    assert len(response.json()) == 2
-    mock_news_service.get_latest_news.assert_called_once()
+    news = response.json()
+    assert len(news) == 3 # MockNewsProvider returns 3 items
+    assert news[0]["title"] == "Stock Market Reaches New All-Time High"
+
+    # Second call should hit cache (verified by coverage or logs usually, 
+    # but here just ensuring it still works)
+    response_2 = await client.get("/api/news")
+    assert response_2.status_code == 200
+    assert response_2.json() == news
 
 @pytest.mark.asyncio
-async def test_run_agent(client, mock_agent_service):
-    response = await client.post("/api/agents/research/run", json={"input": {"test": "data"}})
+async def test_run_agent(client):
+    # This calls real AgentService -> runs in background
+    # Tests that the endpoint accepts the request and queues it.
+    response = await client.post("/api/agents/research/run", json={"input": {"query": "Test query"}})
     assert response.status_code == 200
-    assert response.json() == {"run_id": "test-run-id", "status": "queued"}
-    mock_agent_service.create_run.assert_called_once_with("research", {"test": "data"})
+    data = response.json()
+    assert data["status"] == "queued"
+    assert "run_id" in data
 
 @pytest.mark.asyncio
-async def test_get_run_status(client, mock_agent_service):
-    response = await client.get("/api/agents/runs/test-run-id")
+async def test_get_run_status(client, storage):
+    # Seed a run
+    run_id = str(uuid.uuid4())
+    await storage.save("agent_runs", run_id, {
+        "run_id": run_id,  # Add run_id to document body
+        "agent": "research",
+        "status": "completed",
+        "result": "Test Result"
+    })
+    
+    response = await client.get(f"/api/agents/runs/{run_id}")
     assert response.status_code == 200
-    assert response.json()["run_id"] == "test-run-id"
-    mock_agent_service.get_run.assert_called_once_with("test-run-id")
+    assert response.json()["run_id"] == run_id
+    assert response.json()["status"] == "completed"
 
 @pytest.mark.asyncio
-async def test_get_run_logs(client, mock_agent_service):
-    response = await client.get("/api/agents/runs/test-run-id/logs")
+async def test_get_run_logs(client, storage):
+    # Seed logs
+    run_id = str(uuid.uuid4())
+    log_entry = {
+        "run_id": run_id,
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "level": "INFO",
+        "message": "Test Log"
+    }
+    # Storage.list typically filters. 
+    # FirestoreStorage.list takes 'filters'.
+    # We need to save it such that list can find it.
+    # The collection for logs is "agent_logs" (based on AgentService.get_run_logs)
+    await storage.save("agent_logs", str(uuid.uuid4()), log_entry)
+    
+    response = await client.get(f"/api/agents/runs/{run_id}/logs")
     assert response.status_code == 200
-    assert len(response.json()) == 1
-    mock_agent_service.get_run_logs.assert_called_once_with("test-run-id")
+    logs = response.json()
+    assert len(logs) == 1
+    assert logs[0]["message"] == "Test Log"
 
 @pytest.mark.asyncio
-async def test_optimize_portfolio(client, mock_portfolio_service):
+async def test_optimize_portfolio(client):
+    # Real PortfolioOptimizerService
     payload = {
         "amount": 10000,
         "currency": "USD",
@@ -108,16 +148,122 @@ async def test_optimize_portfolio(client, mock_portfolio_service):
     }
     response = await client.post("/api/portfolio/optimize", json=payload)
     assert response.status_code == 200
-    assert response.json() == {"job_id": "test-job-id", "status": "queued"}
-    mock_portfolio_service.start_optimization.assert_called_once_with(
-        amount=10000,
-        currency="USD",
-        excluded_tickers=["BTC-USD"]
-    )
+    # Should return a job_id and status queued/started
+    data = response.json()
+    assert "job_id" in data
+    assert data["status"] in ["queued", "running", "completed"] 
 
 @pytest.mark.asyncio
-async def test_get_optimization_status(client, mock_storage_service):
-    response = await client.get("/api/portfolio/optimize/test-job-id")
+async def test_get_optimization_status(client, storage):
+    # Seed a job
+    job_id = "test-job-id"
+    await storage.save("optimization_jobs", job_id, {
+        "job_id": job_id,
+        "status": "completed",
+        "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "initial_amount": 10000,
+        "currency": "USD",
+        "optimal_portfolio": []
+    })
+    
+    response = await client.get(f"/api/portfolio/optimize/{job_id}")
     assert response.status_code == 200
-    assert response.json()["job_id"] == "test-job-id"
-    mock_storage_service.get.assert_called_once_with("optimization_jobs", "test-job-id")
+    assert response.json()["job_id"] == job_id
+    assert response.json()["status"] == "completed"
+
+# ==================== Plan Management Tests ====================
+
+@pytest.mark.asyncio
+async def test_create_and_get_plan(client):
+    # Real PlanService
+    payload = {
+        "name": "Integration Test Plan",
+        "description": "Unittest plan",
+        "risk_preference": "moderate",
+        "initial_amount": 100000,
+        "currency": "JPY",
+        "user_id": "default"
+    }
+    # Create
+    response = await client.post("/api/plans", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    plan_id = data["plan_id"]
+    assert data["status"] == "created"
+    
+    # Get
+    response_get = await client.get(f"/api/plans/{plan_id}")
+    assert response_get.status_code == 200
+    plan = response_get.json()
+    assert plan["plan_id"] == plan_id
+    assert plan["name"] == "Integration Test Plan"
+
+@pytest.mark.asyncio
+async def test_list_plans(client, storage):
+    # Helper to clear plans or ensures we filter by user_id
+    user_id = f"user_{uuid.uuid4()}" # Use unique user to avoid noise
+    
+    payload = {"name": "Plan A", "user_id": user_id}
+    await client.post("/api/plans", json=payload)
+    
+    payload2 = {"name": "Plan B", "user_id": user_id}
+    await client.post("/api/plans", json=payload2)
+    
+    response = await client.get(f"/api/plans?user_id={user_id}")
+    assert response.status_code == 200
+    plans = response.json()
+    assert len(plans) >= 2
+    assert any(p["name"] == "Plan A" for p in plans)
+    assert any(p["name"] == "Plan B" for p in plans)
+
+@pytest.mark.asyncio
+async def test_update_plan(client):
+    # Create first
+    resp = await client.post("/api/plans", json={"name": "Original"})
+    plan_id = resp.json()["plan_id"]
+    
+    # Update
+    payload = {"name": "Updated Name", "notes": "Updated Notes"}
+    response = await client.put(f"/api/plans/{plan_id}", json=payload)
+    assert response.status_code == 200
+    assert response.json()["status"] == "updated"
+    
+    # Verify
+    resp_get = await client.get(f"/api/plans/{plan_id}")
+    assert resp_get.json()["name"] == "Updated Name"
+    assert resp_get.json()["notes"] == "Updated Notes"
+
+@pytest.mark.asyncio
+async def test_delete_plan(client):
+    # Create
+    resp = await client.post("/api/plans", json={"name": "To Delete", "user_id": "default"})
+    plan_id = resp.json()["plan_id"]
+    
+    # Delete
+    response = await client.delete(f"/api/plans/{plan_id}")
+    assert response.status_code == 200
+    assert response.json()["status"] == "deleted"
+    
+    # Verify Gone
+    resp_get = await client.get(f"/api/plans/{plan_id}")
+    assert resp_get.status_code == 404
+
+@pytest.mark.asyncio
+async def test_run_research_on_plan(client, storage):
+    # 1. Create Plan
+    resp = await client.post("/api/plans", json={"name": "Research Plan"})
+    plan_id = resp.json()["plan_id"]
+    
+    # 2. Run Research (Calls real ResearchAgent -> LLMService -> MockLLMProvider)
+    payload = {"query": "Analyze Tech Sector"}
+    response = await client.post(f"/api/plans/{plan_id}/research", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert "run_id" in data
+    assert "summary" in data
+    
+    # 3. Verify Plan has research history
+    resp_get = await client.get(f"/api/plans/{plan_id}")
+    plan = resp_get.json()
+    assert len(plan.get("research_history", [])) == 1
+    assert plan["research_history"][0]["query"] == "Analyze Tech Sector"
