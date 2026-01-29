@@ -6,6 +6,8 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     ComposedChart, Scatter, ReferenceDot
 } from 'recharts';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface PortfolioOptimizerProps {
     initialAmount?: number;
@@ -55,7 +57,6 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
                 console.log('Scenarios length:', status.scenarios?.length);
                 console.log('Scenarios:', status.scenarios);
                 setResult(status);
-                debugger;
 
                 if (status.status === 'completed' || status.status === 'failed') {
                     setIsRunning(false);
@@ -115,6 +116,7 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
             fetching_data: 'badge-info',
             forecasting: 'badge-info animate-pulse',
             optimizing: 'badge-warning animate-pulse',
+            generating_analysis: 'badge-primary animate-pulse',
             completed: 'badge-success',
             failed: 'badge-error',
         };
@@ -269,7 +271,7 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
                 )}
 
                 {/* Results Display */}
-                {result && result.status === 'completed' && (
+                {result && (result.status === 'completed' || result.status === 'generating_analysis') && (
                     <div className="mt-6 space-y-6">
                         {/* Key Metrics */}
                         {result.metrics && (
@@ -522,23 +524,39 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
                         )}
 
                         {/* LLM Report */}
-                        {result.llm_report && (
-                            <div className="card bg-base-200 border border-base-300">
-                                <div className="card-body">
-                                    <h3 className="card-title mb-4">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                                        </svg>
-                                        AI Analysis Report
-                                    </h3>
+                        <div className="card bg-base-200 border border-base-300">
+                            <div className="card-body">
+                                <h3 className="card-title mb-4 flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                                    </svg>
+                                    AI Analysis Report
+                                    {result.status === 'generating_analysis' && (
+                                        <span className="loading loading-spinner loading-sm text-primary"></span>
+                                    )}
+                                </h3>
+
+                                {result.llm_report ? (
                                     <div className="prose prose-sm max-w-none">
-                                        <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                             {result.llm_report}
-                                        </div>
+                                        </ReactMarkdown>
                                     </div>
-                                </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center p-8 text-center text-base-content/60">
+                                        {result.status === 'generating_analysis' ? (
+                                            <>
+                                                <span className="loading loading-dots loading-lg mb-2"></span>
+                                                <p>Generative models are analyzing your portfolio...</p>
+                                                <p className="text-xs mt-1">This usually takes 10-20 seconds</p>
+                                            </>
+                                        ) : (
+                                            <p>No analysis report generated.</p>
+                                        )}
+                                    </div>
+                                )}
                             </div>
-                        )}
+                        </div>
                     </div>
                 )}
             </div>

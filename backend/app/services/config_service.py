@@ -73,8 +73,3 @@ class ConfigService:
             "min_commission": 0.0,
             "currency": "USD"
         })
-
-    def get_llm_settings(self) -> Dict[str, Any]:
-        """Get LLM settings."""
-        config = self._load_config()
-        return config.get('llm_settings', {})

@@ -2,21 +2,51 @@ import os
 import hashlib
 import json
 import logging
+import asyncio
+import google.genai as genai
+from openai import OpenAI
+from langchain.chat_models import BaseChatModel
+from langchain.agents import create_agent
+from langchain_core.tools import BaseTool
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, List
-import google.generativeai as genai
+from typing import Dict, Any, TypeVar, Optional, List
 from app.services.config_service import ConfigService
 from app.services.storage_service import StorageService
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar('T')
+
+def run_agent_with_logging(llm: BaseChatModel, tools: List[BaseTool], prompt: str) -> str:
+    agent = create_agent(llm, tools)
+    final_response = ""
+    for chunk in agent.stream({"messages": [{"role": "user", "content": prompt}]}, stream_mode="values"):
+        # Each chunk contains the full state at that point
+        msg = chunk["messages"][-1]
+        if msg.type == "human":
+            continue 
+        if msg.content:
+            if isinstance(msg.content, str):
+                step_text = msg.content
+            elif isinstance(msg.content, list):
+                # If we want to include thoughts, we need to add block.get("type") == "thought"
+                step_text = "".join([block.get("text", "") for block in msg.content if isinstance(block, dict) and block.get("type") == "text"])
+            else:
+                step_text = ""
+            final_response = step_text
+            logger.info(f"LLM message: {step_text}")
+        elif msg.tool_calls:
+            logger.info(f"LLM tool calls: {[tc['name'] for tc in msg.tool_calls]}")
+
+    return final_response
+
 class LLMProvider(ABC):
     @abstractmethod
-    async def generate_content(self, prompt: str) -> str:
+    async def generate_content(self, prompt: str, tools: Optional[List[BaseTool]] = None) -> str | None:
         pass
 
 class MockLLMProvider(LLMProvider):
-    async def generate_content(self, prompt: str) -> str:
+    async def generate_content(self, prompt: str, tools: Optional[List[BaseTool]] = None) -> str | None:
         logger.info(f"Mock LLM received prompt: {prompt[:50]}...")
         # Return a valid JSON string for scenario generation if it detects it's being asked for JSON
         if "json" in prompt.lower():
@@ -34,19 +64,38 @@ class MockLLMProvider(LLMProvider):
         return "Mock LLM Response: This is a simulated response."
 
 class GeminiProvider(LLMProvider):
-    def __init__(self, api_key: str, model_name: str = "gemini-2.0-flash"):
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(model_name)
+    def __init__(self, api_key: str, model_name: str = "gemini-3-flash-preview"):
+        self.client = genai.Client(api_key=api_key)
+        self.model_name = model_name
 
-    async def generate_content(self, prompt: str) -> str:
-        try:
-            # Run in executor to avoid blocking event loop
-            import asyncio
-            response = await asyncio.to_thread(self.model.generate_content, prompt)
+    async def generate_content(self, prompt: str, tools: Optional[List[BaseTool]] = None) -> str | None:
+        if tools:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            llm = ChatGoogleGenerativeAI(client=self.client, model=self.model_name)
+            response = await asyncio.to_thread(run_agent_with_logging, llm=llm, tools=tools, prompt=prompt)
+            return response
+        else:
+            response = await asyncio.to_thread(self.client.models.generate_content, model=self.model_name, contents=[prompt])
             return response.text
-        except Exception as e:
-            logger.error(f"Gemini generation error: {e}")
-            raise e
+
+class OpenAIProvider(LLMProvider):
+    def __init__(self, api_key: str, model_name: str, base_url: str):
+        self.model_name = model_name
+        self.client = OpenAI(base_url=base_url, api_key=api_key)
+
+    async def generate_content(self, prompt: str, tools: Optional[List[BaseTool]] = None) -> str | None:
+        if tools:
+            from langchain_openai import ChatOpenAI
+            llm = ChatOpenAI(client=self.client, model=self.model_name)
+            response = await asyncio.to_thread(run_agent_with_logging, llm=llm, tools=tools, prompt=prompt)
+            return response
+            # Convert LangChain tools to OpenAI format
+            # from langchain_core.utils.function_calling import convert_to_openai_tool
+            # openai_tools = [convert_to_openai_tool(t) for t in tools]
+            # response = await asyncio.to_thread(self.client.chat.completions.create, model=self.model_name, messages=messages, tools=openai_tools)
+        else:
+            response = await asyncio.to_thread(self.client.chat.completions.create, model=self.model_name, messages=[{"role": "user", "content": prompt}])
+            return response.choices[0].message.content
 
 class LLMService:
     def __init__(self, config_service: ConfigService, storage_service: StorageService):
@@ -56,24 +105,26 @@ class LLMService:
         self.provider: LLMProvider = self._initialize_provider()
 
     def _initialize_provider(self) -> LLMProvider:
-        settings = self.config_service.get_llm_settings()
-        provider_type = settings.get("provider", "gemini")
-        
-        # Check environment variable for API key
-        api_key = os.getenv("GEMINI_API_KEY")
-        
-        if provider_type == "gemini" and api_key:
+        # api_key = os.getenv("OPENAI_API_KEY")
+        # base_url = os.getenv("OPENAI_BASE_URL")
+        # model_name = os.getenv("OPENAI_MODEL_NAME")
+        # if api_key and base_url and model_name:
+        #     logger.info("Initializing OpenAI LLM Provider")
+        #     return OpenAIProvider(api_key=api_key, model_name=model_name, base_url=base_url)
+
+        api_key = os.getenv("GEMINI_API_KEY")        
+        if api_key:
             logger.info("Initializing Gemini LLM Provider")
             return GeminiProvider(api_key=api_key)
-        else:
-            logger.warning("Gemini API key not found or provider not set to gemini. Using Mock Provider.")
-            return MockLLMProvider()
+
+        logger.warning("No API key found. Using Mock Provider.")
+        return MockLLMProvider()
 
     def _generate_cache_key(self, prompt: str) -> str:
         """Generate a deterministic cache key for the prompt."""
         return hashlib.md5(prompt.encode('utf-8')).hexdigest()
 
-    async def generate_response(self, prompt: str, use_cache: bool = True) -> str:
+    async def generate_response(self, prompt: str, use_cache: bool = True, tools: Optional[List[BaseTool]] = None) -> str:
         """
         Generate a response from the LLM, using cache if enabled.
         """
@@ -85,13 +136,13 @@ class LLMService:
                 return cached_entry.get("response", "")
 
         try:
-            response = await self.provider.generate_content(prompt)
+            response = await self.provider.generate_content(prompt, tools=tools)
             
-            if use_cache:
+            if use_cache and response is not None:
                 cache_key = self._generate_cache_key(prompt)
                 await self.storage_service.save(self.collection, cache_key, {"response": response, "prompt": prompt})
                 
-            return response
+            return response or ""
         except Exception as e:
             logger.error(f"Error generating LLM response: {e}")
             return ""

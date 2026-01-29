@@ -1,7 +1,7 @@
 """LangChain-compatible forecasting tools for the agent."""
 
 from typing import Optional, Dict, Any
-from langchain.tools import BaseTool
+from langchain_core.tools import BaseTool
 
 
 class MonteCarloTool(BaseTool):
@@ -11,8 +11,8 @@ class MonteCarloTool(BaseTool):
     Use for scenario-specific forecasts with adjusted drift/volatility.
     """
 
-    name = "monte_carlo_simulation"
-    description = """
+    name: str = "monte_carlo_simulation"
+    description: str = """
     Run Monte Carlo simulation using Geometric Brownian Motion (GBM) model.
 
     Use this tool to generate forecasts with custom parameters.
@@ -29,9 +29,7 @@ class MonteCarloTool(BaseTool):
         Forecast results with confidence intervals and return metrics
     """
 
-    def __init__(self, forecasting_engine):
-        super().__init__()
-        self.forecasting_engine = forecasting_engine
+    forecasting_engine: Any
 
     async def _arun(
         self,
@@ -88,8 +86,8 @@ class ARIMATool(BaseTool):
     - Mean-reverting assets
     """
 
-    name = "arima_forecast"
-    description = """
+    name: str = "arima_forecast"
+    description: str = """
     Run ARIMA (AutoRegressive Integrated Moving Average) forecast.
 
     Best for short-term forecasts and trend analysis.
@@ -103,9 +101,7 @@ class ARIMATool(BaseTool):
         ARIMA forecast with confidence intervals and model diagnostics
     """
 
-    def __init__(self, forecasting_engine):
-        super().__init__()
-        self.forecasting_engine = forecasting_engine
+    forecasting_engine: Any
 
     async def _arun(
         self,
@@ -147,8 +143,8 @@ class RiskAnalysisTool(BaseTool):
     - Sortino Ratio
     """
 
-    name = "risk_analysis"
-    description = """
+    name: str = "risk_analysis"
+    description: str = """
     Calculate comprehensive risk metrics for financial assets.
 
     Metrics:
@@ -166,10 +162,8 @@ class RiskAnalysisTool(BaseTool):
         Comprehensive risk metrics for each ticker
     """
 
-    def __init__(self, risk_calculator, history_service):
-        super().__init__()
-        self.risk_calculator = risk_calculator
-        self.history_service = history_service
+    risk_calculator: Any
+    history_service: Any
 
     async def _arun(
         self,
@@ -219,8 +213,8 @@ class TechnicalAnalysisTool(BaseTool):
     - ATR (Average True Range)
     """
 
-    name = "technical_analysis"
-    description = """
+    name: str = "technical_analysis"
+    description: str = """
     Calculate technical indicators and detect market regime.
 
     Provides:
@@ -236,9 +230,7 @@ class TechnicalAnalysisTool(BaseTool):
         Technical indicators and regime analysis for each ticker
     """
 
-    def __init__(self, history_service):
-        super().__init__()
-        self.history_service = history_service
+    history_service: Any
 
     async def _arun(
         self,
@@ -281,8 +273,8 @@ class MacroAnalysisTool(BaseTool):
     - Market regime assessment
     """
 
-    name = "macro_analysis"
-    description = """
+    name: str = "macro_analysis"
+    description: str = """
     Fetch macro economic indicators and assess economic regime.
 
     US Indicators:
@@ -303,9 +295,7 @@ class MacroAnalysisTool(BaseTool):
         Macro indicators and economic regime assessment
     """
 
-    def __init__(self, macro_service):
-        super().__init__()
-        self.macro_service = macro_service
+    macro_service: Any
 
     async def _arun(
         self,
@@ -352,9 +342,9 @@ def create_forecasting_tools(
         List of LangChain tools
     """
     return [
-        MonteCarloTool(forecasting_engine),
-        ARIMATool(forecasting_engine),
-        RiskAnalysisTool(risk_calculator, history_service),
-        TechnicalAnalysisTool(history_service),
-        MacroAnalysisTool(macro_service),
+        MonteCarloTool(forecasting_engine=forecasting_engine),
+        ARIMATool(forecasting_engine=forecasting_engine),
+        RiskAnalysisTool(risk_calculator=risk_calculator, history_service=history_service),
+        TechnicalAnalysisTool(history_service=history_service),
+        MacroAnalysisTool(macro_service=macro_service),
     ]

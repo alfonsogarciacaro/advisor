@@ -11,10 +11,13 @@
   },
   "dependencies": {
     "@google-cloud/firestore": "^7.10.0",
+    "@tailwindcss/typography": "^0.5.19",
     "next": "16.1.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "recharts": "^3.7.0"
+    "react-markdown": "^10.1.0",
+    "recharts": "^3.7.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.0",

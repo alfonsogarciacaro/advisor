@@ -118,8 +118,19 @@ def get_portfolio_optimizer_service(
     config_service: ConfigService = Depends(get_config_service),
     storage_service: StorageService = Depends(get_storage_service),
     forecasting_engine: Any = Depends(get_forecasting_engine),
-    llm_service: Any = Depends(get_llm_service)
+    llm_service: Any = Depends(get_llm_service),
+    macro_service: Any = Depends(get_macro_service),
+    risk_calculator: Any = Depends(get_risk_calculator)
 ) -> Any:
     from app.services.portfolio_optimizer import PortfolioOptimizerService
     logger = get_logger()
-    return PortfolioOptimizerService(history_service, config_service, storage_service, logger, forecasting_engine, llm_service)
+    return PortfolioOptimizerService(
+        history_service, 
+        config_service, 
+        storage_service, 
+        logger, 
+        forecasting_engine, 
+        llm_service,
+        macro_service,
+        risk_calculator
+    )

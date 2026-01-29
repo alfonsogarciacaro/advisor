@@ -44,7 +44,7 @@ export const FinancialNews: React.FC = () => {
                     Updated every 12h
                 </span>
             </div>
-            <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-1">
+            <div className="grid max-h-[600px] gap-4 overflow-y-auto pr-2 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-1">
                 {news.map((item, index) => (
                     <a
                         key={index}

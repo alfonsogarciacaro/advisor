@@ -36,7 +36,7 @@ jobs:
     - name: Install Backend Dependencies
       working-directory: ./backend
       run: |
-        uv sync
+        uv sync --extra dev
 
     - name: Start Backend
       working-directory: ./backend

@@ -20,7 +20,9 @@ class PortfolioOptimizerService:
         storage_service: StorageService,
         logger: LoggerService,
         forecasting_engine: Optional[Any] = None,
-        llm_service: Optional[Any] = None
+        llm_service: Optional[Any] = None,
+        macro_service: Optional[Any] = None,
+        risk_calculator: Optional[Any] = None
     ):
         self.history_service = history_service
         self.config_service = config_service
@@ -28,6 +30,8 @@ class PortfolioOptimizerService:
         self.logger = logger
         self.forecasting_engine = forecasting_engine
         self.llm_service = llm_service
+        self.macro_service = macro_service
+        self.risk_calculator = risk_calculator
         self.collection = "optimization_jobs"
 
     async def start_optimization(self, amount: float, currency: str, excluded_tickers: List[str] = []) -> str:
@@ -119,8 +123,9 @@ class PortfolioOptimizerService:
                     forecast_result = await self.forecasting_engine.run_forecast_suite(
                         tickers=valid_tickers,
                         horizon="6mo",  # Use 6-month forecast
-                        models=["gbm"], # disable "arima" for now to speed up testing
-                        simulations=50,  # Lower sims for portfolio optimization speed
+                        models=["gbm", "arima"],
+                        simulations=100,  # Lower sims for portfolio optimization speed
+                        model_params={"arima": {"auto_tune": False}},  # Disable auto-tuning for speed
                         use_cache=True  # Use cached forecasts if available
                     )
 
@@ -215,50 +220,48 @@ class PortfolioOptimizerService:
                 cov_matrix=cov_matrix
             )
 
-            llm_report = None
-            if self.llm_service:
-                llm_report = await self._generate_llm_report(
-                    amount=amount,
-                    currency=currency,
-                    optimal_assets=optimal_assets,
-                    metrics={
-                        "total_commission": total_commission,
-                        "net_investment": investable_amount,
-                        "annual_custody_cost": sum(investable_amount * w * expense_ratios.get(t, 0.0) for t, w in active_assets.items()),
-                        "expected_annual_return": optimal["annual_return"],
-                        "annual_volatility": optimal["annual_volatility"],
-                        "sharpe_ratio": optimal["sharpe_ratio"]
-                    },
-                    scenarios=scenarios
-                )
+            # Calculate metrics
+            metrics_dict = {
+                "total_commission": total_commission,
+                "net_investment": investable_amount,
+                "annual_custody_cost": sum(investable_amount * w * expense_ratios.get(t, 0.0) for t, w in active_assets.items()),
+                "expected_annual_return": optimal["annual_return"],
+                "annual_volatility": optimal["annual_volatility"],
+                "sharpe_ratio": optimal["sharpe_ratio"]
+            }
 
-            # 8. Save Result
+            # 8. Save Result (Before LLM)
             final_job_state = OptimizationResult(
                 job_id=job_id,
-                status="completed",
-                created_at=datetime.datetime.now(datetime.timezone.utc), # Placeholder, should keep original
+                status="generating_analysis",
+                created_at=datetime.datetime.now(datetime.timezone.utc),
                 completed_at=datetime.datetime.now(datetime.timezone.utc),
                 initial_amount=amount,
                 currency=currency,
                 optimal_portfolio=optimal_assets,
                 efficient_frontier=frontier,
-                metrics={
-                    "total_commission": total_commission,
-                    "net_investment": investable_amount,
-                    "annual_custody_cost": sum(investable_amount * w * expense_ratios.get(t, 0.0) for t, w in active_assets.items()),
-                    "expected_annual_return": optimal["annual_return"],
-                    "annual_volatility": optimal["annual_volatility"],
-                    "sharpe_ratio": optimal["sharpe_ratio"]
-                },
-                scenarios=[s.model_dump() for s in scenarios],
-                llm_report=llm_report
+                metrics=metrics_dict,
+                scenarios=[s.model_dump() for s in scenarios], # type: ignore
+                llm_report=None
             )
             
-            # Update with merge=True? StorageService replace for now.
-            # Need to re-read creating_at? No, I'll just overwrite for simplicity or use the update method if available.
-            # Base class generic update? 
-            # Let's just save the full object.
+            await self.storage_service.save(self.collection, job_id, sanitize_numpy(final_job_state.model_dump()))
+
+            # 9. Generate LLM Report
+            if self.llm_service:
+                llm_report = await self._generate_llm_report(
+                    amount=amount,
+                    currency=currency,
+                    optimal_assets=optimal_assets,
+                    metrics=metrics_dict,
+                    scenarios=scenarios
+                )
+                
+                if llm_report:
+                    final_job_state.llm_report = llm_report
             
+            # Final completion update
+            final_job_state.status = "completed"
             await self.storage_service.save(self.collection, job_id, sanitize_numpy(final_job_state.model_dump()))
 
         except Exception as e:
@@ -406,12 +409,12 @@ class PortfolioOptimizerService:
 
         # Base case - use the expected returns as-is
         base_return = sum(optimal_weights[t] * expected_annual_returns[t] for t in valid_tickers if t in optimal_weights)
-        base_variance = 0
+        base_variance: float = 0
         for i, t1 in enumerate(valid_tickers):
             if t1 not in optimal_weights: continue
             for j, t2 in enumerate(valid_tickers):
                 if t2 not in optimal_weights: continue
-                base_variance += optimal_weights[t1] * optimal_weights[t2] * cov_matrix.iloc[i, j]
+                base_variance += optimal_weights[t1] * optimal_weights[t2] * cov_matrix.iloc[i, j] # type: ignore
         base_volatility = np.sqrt(base_variance)
 
         def generate_trajectory(amount: float, annual_ret: float, months: int = 60) -> List[Dict[str, Any]]:
@@ -494,7 +497,7 @@ class PortfolioOptimizerService:
                     "ticker": a.ticker,
                     "weight": f"{a.weight * 100:.1f}%",
                     "amount": f"{a.amount:.2f} {currency}",
-                    "expected_return": f"{a.expected_return * 100:.2f}%"
+                    "expected_return": f"{(a.expected_return or 0) * 100:.2f}%"
                 }
                 for a in sorted(optimal_assets, key=lambda x: x.weight, reverse=True)[:5]
             ],
@@ -503,8 +506,8 @@ class PortfolioOptimizerService:
                     "name": s.name,
                     "probability": f"{s.probability * 100:.0f}%",
                     "expected_value": f"{s.expected_portfolio_value:.2f} {currency}",
-                    "expected_return": f"{s.expected_return * 100:.2f}%",
-                    "volatility": f"{s.annual_volatility * 100:.2f}%"
+                    "expected_return": f"{(s.expected_return or 0) * 100:.2f}%",
+                    "volatility": f"{(s.annual_volatility or 0) * 100:.2f}%"
                 }
                 for s in scenarios
             ]
@@ -524,8 +527,19 @@ Please provide a concise report (3-4 paragraphs) covering:
 Keep the tone professional yet accessible. Use markdown formatting for readability."""
 
         try:
-            report = await self.llm_service.generate_response(prompt, use_cache=True)
+            # Create tools if dependencies are available
+            tools = None
+            if self.forecasting_engine and self.risk_calculator and self.macro_service:
+                from app.services.forecasting_tools import create_forecasting_tools
+                tools = create_forecasting_tools(
+                    self.forecasting_engine,
+                    self.risk_calculator,
+                    self.history_service,
+                    self.macro_service
+                )
+
+            report = await self.llm_service.generate_response(prompt, use_cache=True, tools=tools)
             return report
         except Exception as e:
-            self.logger.error(f"Failed to generate LLM report for job {job_id}: {e}")
+            self.logger.error(f"Failed to generate LLM report: {e}")
             return None

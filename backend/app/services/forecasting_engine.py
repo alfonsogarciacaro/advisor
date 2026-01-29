@@ -182,6 +182,7 @@ class ForecastingEngine:
         models: Optional[List[str]] = None,
         simulations: int = 1000,
         scenarios: Optional[Dict[str, Dict[str, float]]] = None,
+        model_params: Optional[Dict[str, Dict[str, Any]]] = None,
         use_cache: bool = True,
     ) -> Dict[str, Any]:
         """
@@ -193,6 +194,7 @@ class ForecastingEngine:
             models: List of model names to run (default: from config)
             simulations: Number of simulations for Monte Carlo
             scenarios: Optional scenario adjustments
+            model_params: Optional dict of {model_name: {param: value}}
             use_cache: Whether to use cached forecasts (default: True)
 
         Returns:
@@ -228,7 +230,8 @@ class ForecastingEngine:
             horizon_days,
             price_history,
             simulations,
-            scenarios
+            scenarios,
+            model_params
         )
 
         # Create ensemble
@@ -299,6 +302,7 @@ class ForecastingEngine:
         price_history: Dict[str, Any],
         simulations: int,
         scenarios: Optional[Dict[str, Dict[str, float]]],
+        model_params: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> Dict[str, Dict[str, Any]]:
         """
         Run multiple models in parallel.
@@ -310,6 +314,7 @@ class ForecastingEngine:
             price_history: Price history data
             simulations: Number of simulations
             scenarios: Scenario adjustments
+            model_params: Model-specific parameters
 
         Returns:
             Dict of {model_name: {ticker: results}}
@@ -332,7 +337,8 @@ class ForecastingEngine:
                 horizon_days,
                 price_history,
                 simulations,
-                scenarios
+                scenarios,
+                model_params.get(model_name) if model_params else None
             )
             tasks.append(task)
 
@@ -358,6 +364,7 @@ class ForecastingEngine:
         price_history: Dict[str, Any],
         simulations: int,
         scenarios: Optional[Dict[str, Dict[str, float]]],
+        params: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Run a single model in an async wrapper."""
         loop = asyncio.get_event_loop()
@@ -370,7 +377,8 @@ class ForecastingEngine:
                 horizon_days=horizon_days,
                 price_history=price_history,
                 simulations=simulations,
-                scenarios=scenarios
+                scenarios=scenarios,
+                **(params or {})
             ))
         )
 
