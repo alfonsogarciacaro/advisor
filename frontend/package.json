@@ -10,8 +10,8 @@
     "type-check": "tsc --noEmit",
     "test": "npm run test:integration",
     "test:integration": "concurrently -k -s first \"npm:test:backend\" \"npm:test:frontend\"",
-    "test:backend": "cd ../backend && cross-env PORT=8001 uv run python start_test_server.py",
-    "test:frontend": "cross-env NEXT_PUBLIC_API_URL=http://localhost:8001 npx playwright test"
+    "test:backend": "cd ../backend && uv run python start_test_server.py",
+    "test:frontend": "npx playwright test"
   },
   "dependencies": {
     "@google-cloud/firestore": "^7.10.0",
@@ -35,7 +35,6 @@
     "eslint-config-next": "16.1.5",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "concurrently": "^9.1.2",
-    "cross-env": "^7.0.3"
+    "concurrently": "^9.1.2"
   }
 }

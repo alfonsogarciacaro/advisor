@@ -130,13 +130,13 @@ export interface OptimizationResult {
     error?: string;
 }
 
-export async function optimizePortfolio(amount: number, currency: string): Promise<{ job_id: string; status: string }> {
+export async function optimizePortfolio(amount: number, currency: string, fast: boolean = false): Promise<{ job_id: string; status: string }> {
     const response = await fetch(`${API_BASE_URL}/api/portfolio/optimize`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ amount, currency }),
+        body: JSON.stringify({ amount, currency, fast }),
     });
 
     if (!response.ok) {

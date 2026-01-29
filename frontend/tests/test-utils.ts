@@ -37,7 +37,8 @@ export const createPlan = async (page: Page, name: string) => {
     // Verify plan is visible in list or detail view
     // Since creation selects the plan, we might be in detail view
     // Detail view has "Back to Plans" and the plan name in header
-    await expect(page.getByRole('heading', { name: name })).toBeVisible();
+    // Use h1 selector to avoid matching the ResearchPanel's h2 which also contains the plan name
+    await expect(page.locator('h1', { hasText: name })).toBeVisible();
 };
 
 export const deletePlan = async (page: Page, name: string) => {
@@ -47,23 +48,13 @@ export const deletePlan = async (page: Page, name: string) => {
         await backButton.click();
     }
 
-    // Find plan card delete button
-    // This is tricky because the delete button is icon-only and inside the card.
-    // Structure: card -> card-body -> ... -> title="Delete plan"
-    // We navigate to the card containing the name, then find the delete button.
+    // Find plan card using aria-label
+    const planCard = page.getByRole('button', { name: `Plan: ${name}` });
 
-    // Playwright locator strategy:
-    // Locate the card wrapper that contains the text 'name'
-    const planCard = page.locator('.card').filter({ hasText: name });
-
-    // Hover over it to ensure visibility if needed (usually nice in tests)
-    await planCard.hover();
-
-    // Click cancel/delete button. The tooltip is "Delete plan"
-    // Using title attribute locator
+    // Click the delete button within the plan card
     page.on('dialog', dialog => dialog.accept()); // Handle confirmation
     await planCard.getByTitle('Delete plan').click();
 
-    // Verify gone
+    // Verify plan card is gone
     await expect(planCard).not.toBeVisible();
 };

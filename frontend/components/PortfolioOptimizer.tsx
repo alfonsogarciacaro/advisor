@@ -12,9 +12,10 @@ import remarkGfm from 'remark-gfm';
 interface PortfolioOptimizerProps {
     initialAmount?: number;
     initialCurrency?: string;
+    fast?: boolean;  // Fast mode for testing (skip forecasting/LLM, reduce simulations)
 }
 
-export default function PortfolioOptimizer({ initialAmount = 10000, initialCurrency = 'USD' }: PortfolioOptimizerProps) {
+export default function PortfolioOptimizer({ initialAmount = 10000, initialCurrency = 'USD', fast = false }: PortfolioOptimizerProps) {
     const [amount, setAmount] = useState<number>(initialAmount);
     const [currency, setCurrency] = useState<string>(initialCurrency);
     const [jobId, setJobId] = useState<string | null>(null);
@@ -36,7 +37,7 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
         setResult(null);
 
         try {
-            const response = await optimizePortfolio(amount, currency);
+            const response = await optimizePortfolio(amount, currency, fast);
             setJobId(response.job_id);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to start optimization');
@@ -139,10 +140,11 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
                 {/* Input Form */}
                 <div className="flex flex-wrap gap-4 mt-4">
                     <div className="form-control">
-                        <label className="label">
+                        <label className="label" htmlFor="investment-amount">
                             <span className="label-text">Investment Amount</span>
                         </label>
                         <input
+                            id="investment-amount"
                             type="number"
                             min="100"
                             step="100"
@@ -154,10 +156,11 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
                     </div>
 
                     <div className="form-control">
-                        <label className="label">
+                        <label className="label" htmlFor="currency">
                             <span className="label-text">Currency</span>
                         </label>
                         <select
+                            id="currency"
                             value={currency}
                             onChange={(e) => setCurrency(e.target.value)}
                             className="select select-bordered w-32"

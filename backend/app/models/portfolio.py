@@ -12,6 +12,7 @@ class OptimizationRequest(BaseModel):
     excluded_tickers: Optional[List[str]] = Field(default=[], description="List of tickers to exclude from optimization")
     plan_id: Optional[str] = Field(None, description="Plan ID to get constraints from")
     constraints: Optional[Dict[str, Any]] = None  # Forward reference to PortfolioConstraints
+    fast: Optional[bool] = Field(False, description="Use fast mode (skip forecasting, LLM, reduce simulations) for testing")
 
 class PortfolioAsset(BaseModel):
     ticker: str

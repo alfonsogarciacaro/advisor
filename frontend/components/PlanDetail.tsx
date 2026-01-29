@@ -112,7 +112,7 @@ export default function PlanDetail({ plan, onBack, onPlanUpdate }: PlanDetailPro
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <span>
-                        This plan has <strong>{localPlan.research_history.length}</strong> research analysi
+                        This plan has <strong>{localPlan.research_history.length}</strong> research analysis
                         {localPlan.research_history.length !== 1 ? 's' : ''}.
                         Latest: {new Date(localPlan.research_history[localPlan.research_history.length - 1].timestamp).toLocaleDateString()}
                     </span>
@@ -270,6 +270,7 @@ export default function PlanDetail({ plan, onBack, onPlanUpdate }: PlanDetailPro
                                         <PortfolioOptimizer
                                             initialAmount={localPlan.initial_amount || 10000}
                                             initialCurrency="USD"
+                                            fast={process.env.NEXT_PUBLIC_FAST_OPTIMIZE === 'true'}
                                         />
                                     </div>
                                 </div>

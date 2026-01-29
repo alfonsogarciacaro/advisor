@@ -40,7 +40,8 @@ class PortfolioOptimizerService:
         amount: float,
         currency: str,
         excluded_tickers: List[str] = [],
-        plan_id: Optional[str] = None
+        plan_id: Optional[str] = None,
+        fast: bool = False
     ) -> str:
         """
         Starts the optimization process in the background.
@@ -77,8 +78,8 @@ class PortfolioOptimizerService:
         self.logger.info(f"Queuing optimization job {job_id} for amount {amount} {currency}")
 
         # Fire and forget task
-        asyncio.create_task(self._run_optimization(job_id, amount, currency, excluded_tickers, constraints))
-        
+        asyncio.create_task(self._run_optimization(job_id, amount, currency, excluded_tickers, constraints, fast))
+
         return job_id
 
     async def _run_optimization(
@@ -87,7 +88,8 @@ class PortfolioOptimizerService:
         amount: float,
         currency: str,
         excluded_tickers: List[str],
-        constraints: Optional[PortfolioConstraints] = None
+        constraints: Optional[PortfolioConstraints] = None,
+        fast: bool = False
     ):
         try:
             self.logger.info(f"Starting optimization job {job_id}")
@@ -150,7 +152,8 @@ class PortfolioOptimizerService:
                 expense_ratios[ticker] = etf_info.expense_ratio if etf_info and etf_info.expense_ratio else 0.0
 
             # Get Expected Returns from Forecasting Engine (or fall back to historical)
-            if self.forecasting_engine:
+            # Skip forecasting in fast mode to speed up tests
+            if self.forecasting_engine and not fast:
                 await self._update_job_status(job_id, "forecasting")
 
                 # Use forecasting engine for forward-looking returns
@@ -159,7 +162,7 @@ class PortfolioOptimizerService:
                         tickers=valid_tickers,
                         horizon="6mo",  # Use 6-month forecast
                         models=["gbm", "arima"],
-                        simulations=100,  # Lower sims for portfolio optimization speed
+                        simulations=10 if fast else 100,  # Fewer simulations in fast mode
                         model_params={"arima": {"auto_tune": False}},  # Disable auto-tuning for speed
                         use_cache=True  # Use cached forecasts if available
                     )
@@ -191,7 +194,9 @@ class PortfolioOptimizerService:
                         daily_returns, prices_df, dividends_total, valid_tickers, expense_ratios
                     )
             else:
-                # Use historical returns if no forecasting engine
+                # Use historical returns if no forecasting engine or in fast mode
+                if fast:
+                    self.logger.info(f"Fast mode enabled for job {job_id}, skipping forecasting")
                 expected_annual_returns = self._calculate_historical_returns(
                     daily_returns, prices_df, dividends_total, valid_tickers, expense_ratios
                 )
@@ -210,10 +215,10 @@ class PortfolioOptimizerService:
             # 5. Run MVO (with or without constraints)
             if constraints:
                 frontier, optimal = self._calculate_mean_variance_constrained(
-                    expected_annual_returns, cov_matrix, constraints
+                    expected_annual_returns, cov_matrix, constraints, fast
                 )
             else:
-                frontier, optimal = self._calculate_mean_variance(expected_annual_returns, cov_matrix)
+                frontier, optimal = self._calculate_mean_variance(expected_annual_returns, cov_matrix, fast)
             
             # 6. Format Result
             # Convert optimal weights to PortfolioAssets
@@ -287,8 +292,8 @@ class PortfolioOptimizerService:
             
             await self.storage_service.save(self.collection, job_id, sanitize_numpy(final_job_state.model_dump()))
 
-            # 9. Generate LLM Report
-            if self.llm_service:
+            # 9. Generate LLM Report (skip LLM in fast mode, but provide basic suggestions)
+            if self.llm_service and not fast:
                 llm_result = await self._generate_llm_report(
                     amount=amount,
                     currency=currency,
@@ -305,6 +310,15 @@ class PortfolioOptimizerService:
                     # Store constraint_suggestions if present
                     if "constraint_suggestions" in llm_result:
                         metrics_dict["constraint_suggestions"] = llm_result.get("constraint_suggestions", [])
+            elif fast:
+                # In fast mode, generate simple follow-up suggestions for testing
+                self.logger.info(f"Fast mode: generating basic follow-up suggestions")
+                metrics_dict["follow_up_suggestions"] = [
+                    "Explain the expected return and volatility of this portfolio",
+                    "Analyze the risk factors and diversification benefits",
+                    "How would a recession scenario affect this portfolio?",
+                    "What are the tax implications of this allocation?"
+                ]
             
             # Final completion update
             final_job_state.status = "completed"
@@ -557,7 +571,8 @@ Return JSON only with this structure:
         self,
         mean_returns: pd.Series,
         cov_matrix: pd.DataFrame,
-        constraints: Optional['PortfolioConstraints'] = None
+        constraints: Optional['PortfolioConstraints'] = None,
+        fast: bool = False
     ) -> Tuple[List[EfficientFrontierPoint], Dict[str, Any]]:
         """
         Calculate efficient frontier with user-specified constraints.
@@ -668,7 +683,7 @@ Return JSON only with this structure:
         min_ret = portfolio_return(result_min_vol.x, mean_returns.values, cov_matrix.values)
         max_ret = mean_returns.max()
 
-        target_returns = np.linspace(min_ret, max_ret, 20)
+        target_returns = np.linspace(min_ret, max_ret, 5 if fast else 20)
         efficient_frontier = []
 
         for target in target_returns:
@@ -709,7 +724,7 @@ Return JSON only with this structure:
 
         return efficient_frontier, optimal_portfolio
 
-    def _calculate_mean_variance(self, mean_returns: pd.Series, cov_matrix: pd.DataFrame) -> Tuple[List[EfficientFrontierPoint], Dict[str, Any]]:
+    def _calculate_mean_variance(self, mean_returns: pd.Series, cov_matrix: pd.DataFrame, fast: bool = False) -> Tuple[List[EfficientFrontierPoint], Dict[str, Any]]:
         num_assets = len(mean_returns)
         args = (mean_returns.values, cov_matrix.values)
         tickers = mean_returns.index.tolist()
@@ -757,7 +772,7 @@ Return JSON only with this structure:
         min_ret = portfolio_return(result_min_vol.x, mean_returns.values, cov_matrix.values)
         max_ret = mean_returns.max() # Theoretical max return is investing 100% in highest return asset
         
-        target_returns = np.linspace(min_ret, max_ret, 20)
+        target_returns = np.linspace(min_ret, max_ret, 5 if fast else 20)
         efficient_frontier = []
         
         for target in target_returns:

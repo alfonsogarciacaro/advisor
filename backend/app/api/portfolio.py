@@ -23,7 +23,9 @@ async def optimize_portfolio(
         job_id = await optimizer_service.start_optimization(
             amount=request.amount,
             currency=request.currency,
-            excluded_tickers=request.excluded_tickers
+            excluded_tickers=request.excluded_tickers,
+            plan_id=request.plan_id,
+            fast=request.fast or False
         )
         return {"job_id": job_id, "status": "queued"}
     except ValueError as e:

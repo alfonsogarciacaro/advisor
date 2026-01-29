@@ -72,6 +72,8 @@ export default function PlanManager({ onPlanSelect, currentPlanId }: PlanManager
             setNewPlanName('');
             setNewPlanDescription('');
             setNewPlanRisk('moderate');
+            // Navigate to the newly created plan
+            onPlanSelect(plan);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to create plan');
         }
@@ -164,14 +166,14 @@ export default function PlanManager({ onPlanSelect, currentPlanId }: PlanManager
                     /* Plans List */
                     <div className="space-y-3 mt-4">
                         {plans.map((plan) => (
-                            <div
+                            <button
                                 key={plan.plan_id}
-                                className={`card bg-base-200 border cursor-pointer transition-all ${
-                                    currentPlanId === plan.plan_id
+                                className={`card bg-base-200 border cursor-pointer transition-all text-left ${currentPlanId === plan.plan_id
                                         ? 'border-primary shadow-md'
                                         : 'border-base-300 hover:border-base-content/20'
-                                }`}
+                                    }`}
                                 onClick={() => onPlanSelect(plan)}
+                                aria-label={`Plan: ${plan.name}`}
                             >
                                 <div className="card-body p-4">
                                     <div className="flex justify-between items-start">
@@ -207,7 +209,7 @@ export default function PlanManager({ onPlanSelect, currentPlanId }: PlanManager
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            </button>
                         ))}
                     </div>
                 )}
@@ -220,10 +222,11 @@ export default function PlanManager({ onPlanSelect, currentPlanId }: PlanManager
 
                             <div className="py-4 space-y-4">
                                 <div className="form-control">
-                                    <label className="label">
+                                    <label className="label" htmlFor="plan-name">
                                         <span className="label-text">Plan Name</span>
                                     </label>
                                     <input
+                                        id="plan-name"
                                         type="text"
                                         value={newPlanName}
                                         onChange={(e) => setNewPlanName(e.target.value)}
@@ -234,10 +237,11 @@ export default function PlanManager({ onPlanSelect, currentPlanId }: PlanManager
                                 </div>
 
                                 <div className="form-control">
-                                    <label className="label">
+                                    <label className="label" htmlFor="plan-description">
                                         <span className="label-text">Description (optional)</span>
                                     </label>
                                     <textarea
+                                        id="plan-description"
                                         value={newPlanDescription}
                                         onChange={(e) => setNewPlanDescription(e.target.value)}
                                         className="textarea textarea-bordered"
@@ -247,10 +251,11 @@ export default function PlanManager({ onPlanSelect, currentPlanId }: PlanManager
                                 </div>
 
                                 <div className="form-control">
-                                    <label className="label">
+                                    <label className="label" htmlFor="plan-risk">
                                         <span className="label-text">Risk Preference</span>
                                     </label>
                                     <select
+                                        id="plan-risk"
                                         value={newPlanRisk}
                                         onChange={(e) => setNewPlanRisk(e.target.value as RiskProfile)}
                                         className="select select-bordered"

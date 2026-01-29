@@ -103,7 +103,7 @@ export default function AccountManager({ accounts, onUpdate, currency = 'JPY' }:
             {/* Accounts List */}
             <div className="space-y-3">
                 {accounts.map((account, idx) => (
-                    <div key={idx} className="card bg-base-200 border border-base-300">
+                    <div key={idx} className="card bg-base-200 border border-base-300" aria-label={`Account: ${account.name}`}>
                         <div className="card-body p-4">
                             <div className="flex justify-between items-start">
                                 <div className="flex-1">
@@ -155,6 +155,8 @@ export default function AccountManager({ accounts, onUpdate, currency = 'JPY' }:
                                     <button
                                         onClick={() => setEditingAccount(account)}
                                         className="btn btn-ghost btn-xs"
+                                        aria-label={`Edit ${account.name}`}
+                                        title="Edit account"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
@@ -163,6 +165,8 @@ export default function AccountManager({ accounts, onUpdate, currency = 'JPY' }:
                                     <button
                                         onClick={() => handleDeleteAccount(account.name)}
                                         className="btn btn-ghost btn-xs text-error"
+                                        aria-label={`Delete ${account.name}`}
+                                        title="Delete account"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
@@ -194,10 +198,11 @@ export default function AccountManager({ accounts, onUpdate, currency = 'JPY' }:
 
                         <div className="py-4">
                             <div className="form-control">
-                                <label className="label">
+                                <label className="label" htmlFor="account-type">
                                     <span className="label-text">Account Type</span>
                                 </label>
                                 <select
+                                    id="account-type"
                                     value={newAccountType}
                                     onChange={(e) => setNewAccountType(e.target.value as TaxAccountType)}
                                     className="select select-bordered"
@@ -236,10 +241,11 @@ export default function AccountManager({ accounts, onUpdate, currency = 'JPY' }:
 
                         <div className="py-4 space-y-4">
                             <div className="form-control">
-                                <label className="label">
+                                <label className="label" htmlFor="account-name">
                                     <span className="label-text">Account Name</span>
                                 </label>
                                 <input
+                                    id="account-name"
                                     type="text"
                                     value={editingAccount.name}
                                     onChange={(e) => setEditingAccount({ ...editingAccount, name: e.target.value })}
@@ -248,10 +254,11 @@ export default function AccountManager({ accounts, onUpdate, currency = 'JPY' }:
                             </div>
 
                             <div className="form-control">
-                                <label className="label">
+                                <label className="label" htmlFor="annual-limit">
                                     <span className="label-text">Annual Limit (0 for unlimited)</span>
                                 </label>
                                 <input
+                                    id="annual-limit"
                                     type="number"
                                     value={editingAccount.annual_limit || ''}
                                     onChange={(e) => setEditingAccount({ ...editingAccount, annual_limit: parseFloat(e.target.value) || null })}
@@ -265,10 +272,11 @@ export default function AccountManager({ accounts, onUpdate, currency = 'JPY' }:
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="form-control">
-                                    <label className="label">
+                                    <label className="label" htmlFor="current-balance">
                                         <span className="label-text">Current Balance</span>
                                     </label>
                                     <input
+                                        id="current-balance"
                                         type="number"
                                         value={editingAccount.current_balance}
                                         onChange={(e) => setEditingAccount({ ...editingAccount, current_balance: parseFloat(e.target.value) || 0 })}
@@ -277,10 +285,11 @@ export default function AccountManager({ accounts, onUpdate, currency = 'JPY' }:
                                 </div>
 
                                 <div className="form-control">
-                                    <label className="label">
+                                    <label className="label" htmlFor="available-space">
                                         <span className="label-text">Available Space</span>
                                     </label>
                                     <input
+                                        id="available-space"
                                         type="number"
                                         value={editingAccount.available_space}
                                         onChange={(e) => setEditingAccount({ ...editingAccount, available_space: parseFloat(e.target.value) || 0 })}
@@ -291,10 +300,11 @@ export default function AccountManager({ accounts, onUpdate, currency = 'JPY' }:
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="form-control">
-                                    <label className="label">
+                                    <label className="label" htmlFor="dividend-tax-rate">
                                         <span className="label-text">Dividend Tax Rate (%)</span>
                                     </label>
                                     <input
+                                        id="dividend-tax-rate"
                                         type="number"
                                         step="0.001"
                                         value={editingAccount.dividend_tax_rate * 100}
@@ -304,10 +314,11 @@ export default function AccountManager({ accounts, onUpdate, currency = 'JPY' }:
                                 </div>
 
                                 <div className="form-control">
-                                    <label className="label">
+                                    <label className="label" htmlFor="capital-gains-tax-rate">
                                         <span className="label-text">Capital Gains Tax Rate (%)</span>
                                     </label>
                                     <input
+                                        id="capital-gains-tax-rate"
                                         type="number"
                                         step="0.001"
                                         value={editingAccount.capital_gains_tax_rate * 100}
@@ -330,10 +341,11 @@ export default function AccountManager({ accounts, onUpdate, currency = 'JPY' }:
                             </div>
 
                             <div className="form-control">
-                                <label className="label">
+                                <label className="label" htmlFor="withdrawal-rules">
                                     <span className="label-text">Withdrawal Rules (optional)</span>
                                 </label>
                                 <textarea
+                                    id="withdrawal-rules"
                                     value={editingAccount.withdrawal_rules || ''}
                                     onChange={(e) => setEditingAccount({ ...editingAccount, withdrawal_rules: e.target.value || undefined })}
                                     className="textarea textarea-bordered"
