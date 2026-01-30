@@ -44,7 +44,7 @@ jobs:
         FIRESTORE_EMULATOR_HOST: localhost:8080
         GCP_PROJECT_ID: finance-advisor
       run: |
-        uv run pytest tests/test_endpoints.py -v
+        uv run pytest -v
 
     # 3. Set up Frontend & Run Tests
     - name: Set up Node.js

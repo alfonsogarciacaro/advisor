@@ -1,5 +1,6 @@
 import os
 from google.cloud import firestore
+from google.cloud.firestore import FieldFilter
 from typing import Dict, Any, Optional, List
 from app.services.storage_service import StorageService
 from app.services.logger_service import LoggerService
@@ -41,7 +42,7 @@ class FirestoreStorage(StorageService):
         
         if filters:
             for key, value in filters.items():
-                query = query.where(field_path=key, op_string="==", value=value)
+                query = query.where(filter=FieldFilter(key, "==", value))
                 
         docs = query.stream()
         results = []

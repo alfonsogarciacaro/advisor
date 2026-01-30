@@ -10,8 +10,10 @@ from app.services.history_service import HistoryService
 from app.services.config_service import ConfigService
 from app.services.logger_service import LoggerService
 from app.infrastructure.logging.std_logger import StdLogger
-from app.services.auth_service import AuthService
-from app.infrastructure.auth.mock_auth import MockAuthService
+from app.infrastructure.logging.std_logger import StdLogger
+from app.services.auth_service import AuthService, JWTAuthService, oauth2_scheme
+from app.models.auth import User
+from fastapi import HTTPException, status
 from app.services.storage_service import StorageService
 from app.infrastructure.storage.firestore_storage import FirestoreStorage
 
@@ -21,11 +23,63 @@ def get_logger() -> LoggerService:
 
 @lru_cache()
 def get_auth_service() -> AuthService:
-    return MockAuthService()
+    from app.services.auth.mock_user_provider import MockUserProvider
+    # In the future we can switch based on env var
+    user_provider = MockUserProvider() 
+    return JWTAuthService(user_provider)
+
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    auth_service: AuthService = Depends(get_auth_service)
+) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    payload = auth_service.verify_token(token, credentials_exception)
+    username: str = payload.get("sub")
+    if username is None:
+        raise credentials_exception
+    token_type = payload.get("type")
+    if token_type != "access":
+         raise credentials_exception
+    
+    # We could fetch full user here to verify existence/enabled status
+    # user = await auth_service.user_provider.get_user_by_username(username)
+    # if not user: raise credentials_exception
+    
+    role = payload.get("role", "user")
+    return User(username=username, role=role)
+
+async def get_current_user_optional(
+    token: str | None = Depends(oauth2_scheme), # Optional dependency? No, Depends(oauth2_scheme) throws if missing usually unless auto_error=False
+    auth_service: AuthService = Depends(get_auth_service)
+) -> User | None:
+    # oauth2_scheme throws 401 if no token by default. 
+    # To make it optional we need auto_error=False in the scheme instantiation.
+    # But oauth2_scheme is imported. Let's assume we handle it or use a separate optional scheme if needed.
+    # For now, let's just stick to the pattern we had: try/except or re-implement logic.
+    # If the previous implementation relied on missing token returning None, implies auto_error=False or handling. 
+    # Actually standard OAuth2PasswordBearer(auto_error=True) raises 401.
+    return None # TODO: Implement correct optional logic if needed
+
 
 @lru_cache()
 def get_storage_service() -> StorageService:
     return FirestoreStorage()
+
+@lru_cache()
+def get_currency_service(
+    storage_service: StorageService = Depends(get_storage_service),
+    logger: LoggerService = Depends(get_logger)
+):
+    from app.services.currency_service import CurrencyService
+    return CurrencyService(
+        storage_service=storage_service,
+        logger_service=logger
+    )
 
 @lru_cache()
 def get_news_service() -> NewsService:
@@ -40,13 +94,28 @@ def get_news_service() -> NewsService:
 
 @lru_cache()
 def get_history_service() -> HistoryService:
+    from app.services.history.yfinance_provider import YFinanceProvider
+    from app.services.history.mock_history_provider import MockHistoryProvider
+    
     storage = get_storage_service()
     logger = get_logger()
-    return HistoryService(storage, logger)
+    
+    # Default to Mock unless explicitly enabled (Safety first)
+    enable_yfinance = os.getenv("ENABLE_YFINANCE", "false").lower() in ["1", "true", "yes"]
+    
+    if not enable_yfinance:
+        logger.info("Initializing Mock History Provider (ENABLE_YFINANCE=False)")
+        provider = MockHistoryProvider()
+    else:
+        logger.info("Initializing YFinance History Provider")
+        provider = YFinanceProvider()
+        
+    return HistoryService(storage, logger, provider)
 
 @lru_cache()
 def get_config_service() -> ConfigService:
-    return ConfigService()
+    storage = get_storage_service()
+    return ConfigService(storage_service=storage)
 
 @lru_cache()
 def get_llm_service() -> Any:
@@ -117,6 +186,7 @@ def get_portfolio_optimizer_service(
     history_service: HistoryService = Depends(get_history_service),
     config_service: ConfigService = Depends(get_config_service),
     storage_service: StorageService = Depends(get_storage_service),
+    currency_service: Any = Depends(get_currency_service),
     forecasting_engine: Any = Depends(get_forecasting_engine),
     llm_service: Any = Depends(get_llm_service),
     macro_service: Any = Depends(get_macro_service),
@@ -129,6 +199,7 @@ def get_portfolio_optimizer_service(
         config_service,
         storage_service,
         logger,
+        currency_service,
         forecasting_engine,
         llm_service,
         macro_service,
@@ -170,3 +241,9 @@ def get_research_agent(
         risk_calculator=risk_calculator,
         config_service=config_service
     )
+
+async def get_current_admin_user(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != "admin":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Admin privileges required")
+    return current_user

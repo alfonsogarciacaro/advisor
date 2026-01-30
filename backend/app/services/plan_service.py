@@ -4,7 +4,8 @@ from typing import Dict, Any, List, Optional
 from app.services.storage_service import StorageService
 from app.services.logger_service import LoggerService
 from app.services.config_service import ConfigService
-from app.models.plan import Plan, ResearchRun, RiskProfile
+from app.models.plan import Plan, ResearchRun
+from app.models.types import RiskProfile
 from app.core.utils import sanitize_numpy
 
 
@@ -132,10 +133,11 @@ class PlanService:
         name: Optional[str] = None,
         description: Optional[str] = None,
         notes: Optional[str] = None,
-        risk_preference: Optional[RiskProfile] = None
+        risk_preference: Optional[RiskProfile] = None,
+        initial_portfolio: Optional[List[Dict[str, Any]]] = None
     ) -> bool:
         """
-        Update plan metadata (name, description, notes, risk preference).
+        Update plan metadata (name, description, notes, risk preference, initial_portfolio).
 
         Args:
             plan_id: Plan identifier
@@ -143,6 +145,7 @@ class PlanService:
             description: New description (optional)
             notes: New notes (optional)
             risk_preference: New risk preference (optional)
+            initial_portfolio: New initial portfolio holdings (optional)
 
         Returns:
             True if updated successfully, False otherwise
@@ -161,6 +164,8 @@ class PlanService:
             plan.notes = notes
         if risk_preference is not None:
             plan.risk_preference = risk_preference
+        if initial_portfolio is not None:
+            plan.initial_portfolio = initial_portfolio
 
         plan.updated_at = datetime.datetime.now(datetime.timezone.utc)
 

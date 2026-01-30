@@ -4,6 +4,7 @@ import numpy as np
 import yfinance as yf
 from .storage_service import StorageService
 from .logger_service import LoggerService
+from .history.history_provider import HistoryDataProvider
 from typing import List, Dict, Any, Optional
 
 # Import pandas-ta for technical indicators
@@ -14,9 +15,10 @@ except ImportError:
     PANDAS_TA_AVAILABLE = False
 
 class HistoryService:
-    def __init__(self, storage: StorageService, logger: LoggerService, ttl_hours: int = 24):
+    def __init__(self, storage: StorageService, logger: LoggerService, provider: HistoryDataProvider, ttl_hours: int = 24):
         self.storage = storage
         self.logger = logger
+        self.provider = provider
         self.ttl_hours = ttl_hours
         self.collection = "cache"
         self.doc_id_prefix = "history_"
@@ -24,7 +26,7 @@ class HistoryService:
     async def get_historical_data(self, tickers: List[str], period: str = "1y", interval: str = "1d") -> Dict[str, Any]:
         """
         Fetches historical data for the given tickers.
-        Tries to fetch from cache first, then falls back to yfinance.
+        Tries to fetch from cache first, then falls back to provider.
         """
         results = {}
         tickers_to_fetch = []
@@ -64,10 +66,10 @@ class HistoryService:
             
             tickers_to_fetch.append(ticker)
 
-        # 2. Fetch missing data from yfinance
+        # 2. Fetch missing data from provider
         if tickers_to_fetch:
-            self.logger.info(f"Fetching data from yfinance for {len(tickers_to_fetch)} tickers: {tickers_to_fetch}")
-            data = yf.download(tickers_to_fetch, period=period, interval=interval, group_by='ticker', auto_adjust=True, threads=True)
+            self.logger.info(f"Fetching data from provider for {len(tickers_to_fetch)} tickers: {tickers_to_fetch}")
+            data = self.provider.download_data(tickers_to_fetch, period=period, interval=interval)
             
             for ticker in tickers_to_fetch:
                 if data is None:
@@ -173,7 +175,7 @@ class HistoryService:
                     doc_id = f"{self.doc_id_prefix}{ticker}_{period}_{interval}"
                     await self.storage.save(self.collection, doc_id, cache_entry)
                 else:
-                    self.logger.warning(f"No data returned from yfinance for {ticker}")
+                    self.logger.warning(f"No data returned from provider for {ticker}")
 
         return results
 
@@ -259,43 +261,13 @@ class HistoryService:
 
             tickers_to_fetch.append(ticker)
 
-        # Fetch from yfinance
-        for ticker in tickers_to_fetch:
-            try:
-                ticker_obj = yf.Ticker(ticker)
-                dividends = ticker_obj.dividends
-
-                if dividends.empty:
-                    results[ticker] = []
-                    continue
-
-                start_date = None
-                if period == "1y":
-                    start_date = pd.Timestamp.now(datetime.timezone.utc) - pd.Timedelta(days=365)
-                elif period == "2y":
-                    start_date = pd.Timestamp.now(datetime.timezone.utc) - pd.Timedelta(days=365*2)
-                elif period == "5y":
-                    start_date = pd.Timestamp.now(datetime.timezone.utc) - pd.Timedelta(days=365*5)
-                # Default to all if not specified or "max"
-
-                dividend_data = []
-                for date, amount in dividends.items():
-                    # date from yfinance is usually timezone aware
-                    if start_date:
-                        # Ensure comparison is valid
-                        div_date = date
-                        if div_date.tzinfo is None:
-                             div_date = div_date.replace(tzinfo=datetime.timezone.utc)
-                        if div_date < start_date:
-                            continue
-
-                    dividend_data.append({
-                        "date": date.isoformat(),
-                        "amount": float(amount)
-                    })
-
+        # Fetch from provider
+        if tickers_to_fetch:
+            provider_results = self.provider.get_dividends(tickers_to_fetch, period)
+            
+            for ticker, dividend_data in provider_results.items():
                 results[ticker] = dividend_data
-
+                
                 # Cache the results
                 cache_entry = {
                     "data": dividend_data,
@@ -303,10 +275,6 @@ class HistoryService:
                 }
                 doc_id = f"{self.doc_id_prefix}div_{ticker}_{period}"
                 await self.storage.save(self.collection, doc_id, cache_entry)
-
-            except Exception as e:
-                self.logger.error(f"Failed to fetch dividends for {ticker}: {e}")
-                results[ticker] = []
 
         return results
 
@@ -355,25 +323,11 @@ class HistoryService:
 
             tickers_to_fetch.append(ticker)
 
-        # Fetch from yfinance
-        for ticker in tickers_to_fetch:
-            try:
-                ticker_obj = yf.Ticker(ticker)
-                info = ticker_obj.info
-
-                fundamental_data = {}
-                for field in fields:
-                    fundamental_data[field] = info.get(field, None)
-
-                # Add metadata
-                fundamental_data["_metadata"] = {
-                    "shortName": info.get("shortName", ""),
-                    "longName": info.get("longName", ""),
-                    "currency": info.get("currency", "USD"),
-                    "exchange": info.get("exchange", ""),
-                    "market": info.get("market", "")
-                }
-
+        # Fetch from provider
+        if tickers_to_fetch:
+            provider_results = self.provider.get_fundamentals(tickers_to_fetch, fields)
+            
+            for ticker, fundamental_data in provider_results.items():
                 results[ticker] = fundamental_data
 
                 # Cache the results
@@ -383,9 +337,6 @@ class HistoryService:
                 }
                 doc_id = f"{self.doc_id_prefix}fund_{ticker}"
                 await self.storage.save(self.collection, doc_id, cache_entry)
-
-            except Exception as e:
-                results[ticker] = {}
 
         return results
 
@@ -513,7 +464,7 @@ class HistoryService:
                 result["sma_200"] = float(df["Close"].tail(200).mean()) if len(df) >= 200 else None
 
             if len(df) >= 20:
-                result["ema_20"] = float(df["Close"].tail(20).ewm(span=20, adjust=False).mean())
+                result["ema_20"] = float(df["Close"].tail(20).ewm(span=20, adjust=False).mean().iloc[-1])
 
         # Momentum: RSI
         if "RSI" in indicators and len(df) >= 15:
@@ -765,4 +716,11 @@ class HistoryService:
             return "bearish"
         else:
             return "neutral"
+
+    def get_latest_prices(self, tickers: List[str]) -> Dict[str, float]:
+        """Get latest closing prices for tickers.
+        
+        Delegates to the configured provider (mock or yfinance).
+        """
+        return self.provider.get_latest_prices(tickers)
 

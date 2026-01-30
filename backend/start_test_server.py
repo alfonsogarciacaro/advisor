@@ -6,17 +6,15 @@ import time
 import uvicorn
 
 if __name__ == "__main__":
-    # Set environment variables for testing
-    os.environ["GCP_PROJECT_ID"] = "test-project"
-    os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:8080"
-
-    # Ensure no external API keys are set so we use internal mocks
-    if "GEMINI_API_KEY" in os.environ:
-        del os.environ["GEMINI_API_KEY"]
-    if "OPENAI_API_KEY" in os.environ:
-        del os.environ["OPENAI_API_KEY"]
-    if "ALPHA_VANTAGE_API_KEY" in os.environ:
-        del os.environ["ALPHA_VANTAGE_API_KEY"]
+    from dotenv import load_dotenv
+    
+    # Load .env.test to configure environment for testing (mocks, etc)
+    env_test_path = os.path.join(os.path.dirname(__file__), ".env.test")
+    if os.path.exists(env_test_path):
+        print(f"Loading test environment from {env_test_path}")
+        load_dotenv(env_test_path, override=True)
+    else:
+        print("WARNING: .env.test not found!")
 
     print("Starting backend for integration tests with mocked services...")
     print(f"GCP_PROJECT_ID: {os.environ.get('GCP_PROJECT_ID')}")
@@ -37,5 +35,5 @@ if __name__ == "__main__":
     # Run the server
     port = 8001
     print(f"Starting server on port {port}...")
-    uvicorn.run("app.main:app", port=port)
+    uvicorn.run("app.main:app", port=port, reload=True, log_level="debug")
 

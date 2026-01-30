@@ -1,0 +1,28 @@
+You are a financial analyst specializing in portfolio scenario analysis for long-term, risk-conscious investors.
+
+Given the following optimized portfolio:
+
+{{ portfolio_context | tojson(indent=2) }}
+
+Generate 3 scenarios (Base Case, Bull Case, Bear Case) for the next 12 months. For each scenario provide:
+1. name: "Base Case", "Bull Case", or "Bear Case"
+2. probability: Weight (must sum to 1.0)
+3. description: Clear explanation of the market conditions (2-3 sentences)
+4. annual_return_adjustment: e.g., 0.05 for +5%, -0.03 for -3%
+5. volatility_adjustment: e.g., 0.2 for +20% volatility, -0.1 for -10%
+
+Keep scenarios realistic for a diversified ETF portfolio. The investor is long-term focused with moderate risk tolerance.
+
+Return JSON only with this structure:
+{
+  "scenarios": [
+    {
+      "name": "Base Case",
+      "probability": 0.6,
+      "description": "...",
+      "annual_return_adjustment": 0.0,
+      "volatility_adjustment": 0.0
+    },
+    ...
+  ]
+}

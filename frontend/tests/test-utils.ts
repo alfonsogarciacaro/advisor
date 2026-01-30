@@ -28,17 +28,22 @@ export const createPlan = async (page: Page, name: string) => {
     await page.getByLabel('Plan Name').fill(name);
     await page.getByLabel('Risk Preference').selectOption('moderate');
 
+    // Get the dialog before clicking submit (so we can wait for it to close)
+    const createDialog = page.getByRole('dialog').filter({ has: page.getByText('Create Plan') });
+
     // Submit
     await page.getByRole('button', { name: 'Create Plan' }).click();
 
-    // Verify modal closed
-    await expect(page.getByRole('dialog')).not.toBeVisible();
+    // Wait for plan creation dialog to close specifically (not other modals like research panel)
+    await expect(createDialog).not.toBeVisible({ timeout: 10000 });
 
-    // Verify plan is visible in list or detail view
-    // Since creation selects the plan, we might be in detail view
+    // Verify plan is visible in detail view
     // Detail view has "Back to Plans" and the plan name in header
     // Use h1 selector to avoid matching the ResearchPanel's h2 which also contains the plan name
-    await expect(page.locator('h1', { hasText: name })).toBeVisible();
+    await expect(page.locator('h1', { hasText: name })).toBeVisible({ timeout: 10000 });
+
+    // Wait a bit for plan detail to fully load (ETFs, accounts, etc.)
+    await page.waitForTimeout(1000);
 };
 
 export const deletePlan = async (page: Page, name: string) => {

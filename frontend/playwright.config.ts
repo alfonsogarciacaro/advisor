@@ -20,7 +20,11 @@ export default defineConfig({
     webServer: {
         command: 'npm run dev -- --port 3001',
         url: 'http://localhost:3001',
-        reuseExistingServer: true,
+        reuseExistingServer: false,
+        stderr: 'pipe',
+        wait: {
+            stdout: /ready/i
+        },
         env: {
             NEXT_PUBLIC_API_URL: 'http://localhost:8001',
             NEXT_PUBLIC_FAST_OPTIMIZE: 'true',

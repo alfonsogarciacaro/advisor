@@ -12,6 +12,8 @@ from app.services.logger_service import LoggerService
 from app.models.portfolio import OptimizationResult, PortfolioAsset, EfficientFrontierPoint, ScenarioForecast
 from app.models.plan import PortfolioConstraints
 from app.core.utils import sanitize_numpy
+from app.core.prompt_manager import get_prompt_manager
+
 
 class PortfolioOptimizerService:
     def __init__(
@@ -20,6 +22,7 @@ class PortfolioOptimizerService:
         config_service: ConfigService,
         storage_service: StorageService,
         logger: LoggerService,
+        currency_service: Optional[Any] = None,
         forecasting_engine: Optional[Any] = None,
         llm_service: Optional[Any] = None,
         macro_service: Optional[Any] = None,
@@ -29,11 +32,13 @@ class PortfolioOptimizerService:
         self.config_service = config_service
         self.storage_service = storage_service
         self.logger = logger
+        self.currency_service = currency_service
         self.forecasting_engine = forecasting_engine
         self.llm_service = llm_service
         self.macro_service = macro_service
         self.risk_calculator = risk_calculator
         self.collection = "optimization_jobs"
+        self.prompt_manager = get_prompt_manager()
 
     async def start_optimization(
         self,
@@ -41,7 +46,10 @@ class PortfolioOptimizerService:
         currency: str,
         excluded_tickers: List[str] = [],
         plan_id: Optional[str] = None,
-        fast: bool = False
+        fast: bool = False,
+        historical_date: Optional[str] = None,
+        use_strategy_template: Optional[str] = None,
+        account_type: Optional[str] = None
     ) -> str:
         """
         Starts the optimization process in the background.
@@ -51,6 +59,10 @@ class PortfolioOptimizerService:
             currency: Currency code
             excluded_tickers: Tickers to exclude from optimization
             plan_id: Optional plan ID to load constraints from
+            fast: Use fast mode (skip forecasting, LLM, reduce simulations)
+            historical_date: ISO date string for backtesting (e.g., "2020-01-01")
+            use_strategy_template: Strategy template ID to use (e.g., "conservative_income")
+            account_type: Account type for tax calculations (e.g., "taxable", "nisa_growth")
         """
         job_id = str(uuid.uuid4())
 
@@ -65,6 +77,19 @@ class PortfolioOptimizerService:
             except Exception as e:
                 self.logger.warning(f"Could not load constraints from plan {plan_id}: {e}")
 
+        # Load constraints from strategy template if specified
+        if use_strategy_template:
+            try:
+                from app.services.strategies_service import StrategiesService
+                strategies_service = StrategiesService(self.config_service)
+                template = strategies_service.get_strategy(use_strategy_template)
+                if template:
+                    # Convert template constraints to PortfolioConstraints
+                    constraints = PortfolioConstraints(**template.constraints)
+                    self.logger.info(f"Loaded constraints from strategy template: {use_strategy_template}")
+            except Exception as e:
+                self.logger.warning(f"Could not load strategy template {use_strategy_template}: {e}")
+
         initial_job_state = OptimizationResult(
             job_id=job_id,
             status="queued",
@@ -76,9 +101,14 @@ class PortfolioOptimizerService:
         await self.storage_service.save(self.collection, job_id, sanitize_numpy(initial_job_state.model_dump()))
 
         self.logger.info(f"Queuing optimization job {job_id} for amount {amount} {currency}")
+        if historical_date:
+            self.logger.info(f"Backtesting mode: historical_date={historical_date}")
 
         # Fire and forget task
-        asyncio.create_task(self._run_optimization(job_id, amount, currency, excluded_tickers, constraints, fast))
+        asyncio.create_task(self._run_optimization(
+            job_id, amount, currency, excluded_tickers, constraints, fast,
+            historical_date, use_strategy_template, account_type
+        ))
 
         return job_id
 
@@ -89,7 +119,10 @@ class PortfolioOptimizerService:
         currency: str,
         excluded_tickers: List[str],
         constraints: Optional[PortfolioConstraints] = None,
-        fast: bool = False
+        fast: bool = False,
+        historical_date: Optional[str] = None,
+        use_strategy_template: Optional[str] = None,
+        account_type: Optional[str] = None
     ):
         try:
             self.logger.info(f"Starting optimization job {job_id}")
@@ -106,29 +139,47 @@ class PortfolioOptimizerService:
                 raise ValueError("No tickers available for optimization")
 
             # 2. Fetch Data (Price & Dividends)
-            # We need daily returns for covariance matrix
-            # We need dividend history for total return calculation
-            
-            # Fetch last 1 year of data for optimization
-            period = "1y" 
+            # For backtesting, we need extended historical data
+            if historical_date:
+                # Backtesting mode: Fetch data from historical_date to NOW
+                try:
+                    hist_date = datetime.datetime.fromisoformat(historical_date)
+                except ValueError:
+                    raise ValueError(f"Invalid historical_date format: {historical_date}. Use YYYY-MM-DD.")
+
+                # Fetch extended history: (hist_date - 2 years) to NOW
+                # We need data before hist_date for training, after for validation
+                end_date = datetime.datetime.now(datetime.timezone.utc)
+                start_date = hist_date - datetime.timedelta(days=730)  # 2 years training
+
+                # Calculate period in days for history service
+                days_diff = (end_date - start_date).days
+                period = "max" if days_diff > 365 * 5 else f"{days_diff // 30}mo"
+
+                self.logger.info(f"Backtesting mode: Fetching {period} of data from {start_date.date()} to {end_date.date()}")
+            else:
+                # Normal optimization mode
+                period = "1y"
+                self.logger.info("Normal optimization mode: Fetching 1y of data")
+
             history_data = await self.history_service.get_historical_data(tickers, period=period)
             dividend_data = await self.history_service.get_dividend_history(tickers, period=period)
-            
+
             # 3. Process Data
             prices_df = pd.DataFrame()
             dividends_total = {}
-            
+
             for ticker in tickers:
                 data = history_data.get(ticker, [])
                 if not data:
                     continue
-                    
+
                 df = pd.DataFrame(data)
                 df['date'] = pd.to_datetime(df['date'])
                 df.set_index('date', inplace=True)
                 # Keep only close prices
                 prices_df[ticker] = df['close']
-                
+
                 # Sum dividends
                 divs = dividend_data.get(ticker, [])
                 total_div = sum(d['amount'] for d in divs)
@@ -142,12 +193,40 @@ class PortfolioOptimizerService:
 
             valid_tickers = prices_df.columns.tolist()
 
-            # Calculate Daily Returns for covariance matrix
-            daily_returns = prices_df.pct_change().dropna()
+            # NEW: For backtesting, split into training and test sets
+            test_data = None
+            if historical_date:
+                hist_date = datetime.datetime.fromisoformat(historical_date)
+                # Ensure hist_date is timezone-aware
+                if hist_date.tzinfo is None:
+                    hist_date = hist_date.replace(tzinfo=datetime.timezone.utc)
+
+                # Training data: everything up to historical_date
+                training_data = prices_df[prices_df.index <= hist_date]
+                # Test data: everything after historical_date (for backtest validation)
+                test_data = prices_df[prices_df.index > hist_date]
+
+                if training_data.empty:
+                    raise ValueError(f"Insufficient training data before {historical_date}")
+                if test_data.empty:
+                    raise ValueError(f"Insufficient test data after {historical_date}")
+
+                self.logger.info(f"Training data: {training_data.index.min().date()} to {training_data.index.max().date()}")
+                self.logger.info(f"Test data: {test_data.index.min().date()} to {test_data.index.max().date()}")
+
+                # Use training data for optimization
+                prices_for_optimization = training_data
+            else:
+                # Normal mode: use all data
+                prices_for_optimization = prices_df
+                test_data = None
+
+            # Calculate Daily Returns for covariance matrix (using training data for backtesting)
+            daily_returns = prices_for_optimization.pct_change().dropna()
 
             # Get expense ratios from config (needed for both forecast and historical paths)
             expense_ratios = {}
-            for ticker in valid_tickers:
+            for ticker in prices_for_optimization.columns.tolist():
                 etf_info = self.config_service.get_etf_info(ticker)
                 expense_ratios[ticker] = etf_info.expense_ratio if etf_info and etf_info.expense_ratio else 0.0
 
@@ -265,7 +344,26 @@ class PortfolioOptimizerService:
                 cov_matrix=cov_matrix
             )
 
-            # Calculate metrics
+            # 8. Run backtest if in historical mode
+            backtest_result = None
+            if historical_date and test_data is not None:
+                self.logger.info(f"Calculating backtest performance from {historical_date}")
+                try:
+                    backtest_result = self._calculate_backtest_performance(
+                        optimal_weights=active_assets,
+                        test_data=test_data,
+                        training_data=prices_for_optimization,
+                        initial_amount=amount,
+                        historical_date=datetime.datetime.fromisoformat(historical_date),
+                        account_type=account_type or 'taxable'
+                    )
+                    self.logger.info(f"Backtest complete: {backtest_result.metrics['total_return']:.2%} return")
+                except Exception as e:
+                    self.logger.error(f"Backtest calculation failed: {e}")
+                    # Don't fail the optimization, just skip backtest
+                    backtest_result = None
+
+            # 9. Calculate metrics
             metrics_dict = {
                 "total_commission": total_commission,
                 "net_investment": investable_amount,
@@ -275,7 +373,7 @@ class PortfolioOptimizerService:
                 "sharpe_ratio": optimal["sharpe_ratio"]
             }
 
-            # 8. Save Result (Before LLM)
+            # 10. Save Result (Before LLM)
             final_job_state = OptimizationResult(
                 job_id=job_id,
                 status="generating_analysis",
@@ -287,7 +385,8 @@ class PortfolioOptimizerService:
                 efficient_frontier=frontier,
                 metrics=metrics_dict,
                 scenarios=[s.model_dump() for s in scenarios], # type: ignore
-                llm_report=None
+                llm_report=None,
+                backtest_result=sanitize_numpy(backtest_result.model_dump()) if backtest_result else None  # NEW
             )
             
             await self.storage_service.save(self.collection, job_id, sanitize_numpy(final_job_state.model_dump()))
@@ -322,6 +421,8 @@ class PortfolioOptimizerService:
             
             # Final completion update
             final_job_state.status = "completed"
+            if backtest_result:
+                final_job_state.backtest_result = sanitize_numpy(backtest_result.model_dump())
             await self.storage_service.save(self.collection, job_id, sanitize_numpy(final_job_state.model_dump()))
 
         except Exception as e:
@@ -385,35 +486,10 @@ class PortfolioOptimizerService:
             ]
         }
 
-        prompt = f"""You are a financial analyst specializing in portfolio scenario analysis for long-term, risk-conscious investors.
-
-Given the following optimized portfolio:
-
-{json.dumps(portfolio_context, indent=2)}
-
-Generate 3 scenarios (Base Case, Bull Case, Bear Case) for the next 12 months. For each scenario provide:
-1. name: "Base Case", "Bull Case", or "Bear Case"
-2. probability: Weight (must sum to 1.0)
-3. description: Clear explanation of the market conditions (2-3 sentences)
-4. annual_return_adjustment: e.g., 0.05 for +5%, -0.03 for -3%
-5. volatility_adjustment: e.g., 0.2 for +20% volatility, -0.1 for -10%
-
-Keep scenarios realistic for a diversified ETF portfolio. The investor is long-term focused with moderate risk tolerance.
-
-Return JSON only with this structure:
-{{
-  "scenarios": [
-    {{
-      "name": "Base Case",
-      "probability": 0.6,
-      "description": "...",
-      "annual_return_adjustment": 0.0,
-      "volatility_adjustment": 0.0
-    }},
-    ...
-  ]
-}}
-"""
+        prompt = self.prompt_manager.render_prompt(
+            "portfolio_optimizer/scenario_analysis.jinja",
+            portfolio_context=portfolio_context
+        )
 
         try:
             response = await self.llm_service.generate_json(prompt)
@@ -951,73 +1027,11 @@ Return JSON only with this structure:
         # Determine if we should suggest constraints
         suggest_constraints = max_weight > 0.25 or num_holdings < 5 or metrics.get('annual_volatility', 0) > 0.15
 
-        # Build prompt sections conditionally
-        prompt_intro = f"""You are a financial advisor providing a portfolio analysis report for a long-term, risk-conscious investor.
-
-Portfolio Summary:
-{json.dumps(portfolio_summary, indent=2)}
-
-Please provide:
-
-1. A concise report (3-4 paragraphs) covering:
-   - Portfolio Overview - Brief summary of the allocation strategy
-   - Risk Analysis - Assessment of volatility and diversification
-   - Return Expectations - Analysis of expected returns under different scenarios
-   - Recommendations - Key considerations for the investor
-
-2. Three to four suggested follow-up research questions that would help the investor better understand this portfolio. Each question should:
-   - Be specific and actionable
-   - Address a potential concern or area for deeper analysis
-   - Be answerable through quantitative analysis or research
-"""
-
-        prompt_constraints = """
-3. (Only if issues detected) Constraint Suggestions: If the portfolio has:
-   - Any single asset >25% concentration
-   - Fewer than 5 holdings
-   - Volatility >15%
-   Suggest 1-2 specific constraints to improve it. For each:
-   - type: "asset" (max single asset), "diversification" (min holdings), or "sector" (sector cap)
-   - description: Clear explanation
-   - specific_value: e.g., 0.20 for max 20% weight
-
-Add to JSON: "constraint_suggestions": [{"type": "...", "description": "...", "specific_value": ...}]
-"""
-
-        prompt_format = """
-Format your response as JSON:
-{
-  "report": "Your markdown-formatted report here...",
-  "follow_up_suggestions": [
-    "Question 1",
-    "Question 2",
-    "Question 3",
-    "Question 4 (optional)"
-  ]
-}
-"""
-
-        if suggest_constraints:
-            prompt_format = """
-Format your response as JSON:
-{
-  "report": "Your markdown-formatted report here...",
-  "follow_up_suggestions": [
-    "Question 1",
-    "Question 2",
-    "Question 3",
-    "Question 4 (optional)"
-  ],
-  "constraint_suggestions": [
-    {"type": "asset|diversification|sector", "description": "...", "specific_value": 0.20}
-  ]
-}
-"""
-
-        prompt = prompt_intro + (prompt_constraints if suggest_constraints else "") + prompt_format + """
-
-Keep the tone professional yet accessible. Use markdown formatting for the report.
-"""
+        prompt = self.prompt_manager.render_prompt(
+            "portfolio_optimizer/portfolio_report.jinja",
+            portfolio_summary=portfolio_summary,
+            suggest_constraints=suggest_constraints
+        )
 
         try:
             # Create tools if dependencies are available
@@ -1054,6 +1068,147 @@ Keep the tone professional yet accessible. Use markdown formatting for the repor
             self.logger.error(f"Failed to generate LLM report: {e}")
             return None
 
+    def _calculate_backtest_performance(
+        self,
+        optimal_weights: Dict[str, float],
+        test_data: pd.DataFrame,
+        training_data: pd.DataFrame,
+        initial_amount: float,
+        historical_date: datetime.datetime,
+        account_type: Optional[str] = None
+    ):
+        """
+        Calculate how the optimized portfolio would have performed.
+
+        Uses only forward-looking data (test_data) to validate the optimization.
+
+        Args:
+            optimal_weights: Portfolio weights from optimization
+            test_data: Price data AFTER historical_date (forward-looking)
+            training_data: Price data BEFORE historical_date (used for optimization)
+            initial_amount: Initial investment amount
+            historical_date: The date that splits training/test data
+            account_type: Account type for tax calculations
+
+        Returns:
+            BacktestResult with trajectory and metrics
+        """
+        from app.models.portfolio import BacktestResult
+
+        # Filter weights to only include tickers in test_data
+        valid_weights = {k: v for k, v in optimal_weights.items() if k in test_data.columns}
+
+        if not valid_weights:
+            raise ValueError("No valid weights for backtesting")
+
+        # Calculate daily portfolio returns
+        portfolio_returns = (test_data[list(valid_weights.keys())].pct_change() * pd.Series(valid_weights)).sum(axis=1)
+        portfolio_returns = portfolio_returns.dropna()
+
+        # Calculate portfolio value over time (starting from initial_amount)
+        portfolio_value = initial_amount * (1 + portfolio_returns).cumprod()
+
+        # Calculate benchmark (60/40 SPY/AGG)
+        benchmark_weights = {'SPY': 0.6, 'AGG': 0.4}
+        available_benchmark = {k: v for k, v in benchmark_weights.items() if k in test_data.columns}
+
+        if len(available_benchmark) == 2:
+            # Normalize weights if both available
+            total = sum(available_benchmark.values())
+            available_benchmark = {k: v/total for k, v in available_benchmark.items()}
+
+        benchmark_returns = (test_data[list(available_benchmark.keys())].pct_change() * pd.Series(available_benchmark)).sum(axis=1)
+        benchmark_returns = benchmark_returns.dropna()
+        benchmark_value = initial_amount * (1 + benchmark_returns).cumprod()
+
+        # Calculate pre-tax metrics
+        final_value = portfolio_value.iloc[-1]
+        pre_tax_total_return = (final_value / initial_amount) - 1
+
+        # Max drawdown
+        rolling_max = portfolio_value.expanding().max()
+        drawdown = (portfolio_value - rolling_max) / rolling_max
+        max_drawdown = drawdown.min()
+
+        # Recovery time (if drawdown occurred)
+        recovery_date = None
+        recovery_days = None
+        if max_drawdown < -0.05:  # 5% or more drop
+            max_dd_date = drawdown.idxmin()
+            recovery_mask = portfolio_value > portfolio_value.loc[max_dd_date]
+            if recovery_mask.any():
+                recovery_date = portfolio_value[recovery_mask].index[0]
+                recovery_days = (recovery_date - max_dd_date).days
+
+        # Calculate additional metrics
+        volatility = portfolio_returns.std() * np.sqrt(252)
+
+        # Calculate annualized return (CAGR)
+        days = len(portfolio_value)
+        years = days / 252
+        cagr = (final_value / initial_amount) ** (1 / years) - 1 if years > 0 else 0
+
+        # Sharpe ratio (assume 4% risk-free rate)
+        risk_free_rate = 0.04
+        sharpe_ratio = (cagr - risk_free_rate) / volatility if volatility > 0 else 0
+
+        # Calculate tax impact
+        capital_gains_tax = 0.0
+        tax_rate = 0.0
+        after_tax_final_value = final_value
+
+        if account_type and account_type != 'nisa_growth' and account_type != 'nisa_general' and account_type != 'isa':
+            # Get tax rate from config
+            tax_rate = self.config_service.get_tax_rate_for_account(account_type, holding_period_days=365)
+
+            # Calculate capital gains tax (simplified: tax on gains at end)
+            capital_gain = max(0, final_value - initial_amount)
+            capital_gains_tax = capital_gain * tax_rate
+            after_tax_final_value = final_value - capital_gains_tax
+
+        after_tax_return = (after_tax_final_value / initial_amount) - 1
+
+        # Build trajectory
+        trajectory = [
+            {
+                'date': date.isoformat(),
+                'value': float(value),
+                'pre_tax_value': float(portfolio_value.iloc[i]) if i == len(portfolio_value) - 1 else float(value)
+            }
+            for i, (date, value) in enumerate(zip(portfolio_value.index, portfolio_value))
+        ]
+
+        # Build benchmark trajectory
+        benchmark_trajectory = [
+            {'date': date.isoformat(), 'value': float(value)}
+            for date, value in zip(benchmark_value.index, benchmark_value)
+        ]
+
+        # Build metrics dict
+        metrics = {
+            'total_return': after_tax_return,
+            'pre_tax_total_return': pre_tax_total_return,
+            'final_value': after_tax_final_value,
+            'volatility': float(volatility),
+            'sharpe_ratio': float(sharpe_ratio),
+            'max_drawdown': float(max_drawdown),
+            'recovery_days': recovery_days,
+            'cagr': float(cagr),
+            'capital_gains_tax': float(capital_gains_tax) if capital_gains_tax > 0 else 0.0,
+            'tax_rate': float(tax_rate),
+            'tax_impact': float(capital_gains_tax / final_value) if final_value > 0 else 0.0
+        }
+
+        return BacktestResult(
+            trajectory=trajectory,
+            benchmark_trajectory=benchmark_trajectory,
+            metrics=metrics,
+            start_date=test_data.index[0].isoformat(),
+            end_date=test_data.index[-1].isoformat(),
+            account_type=account_type,
+            capital_gains_tax=float(capital_gains_tax) if capital_gains_tax > 0 else None
+        )
+
     async def _generate_constraint_suggestions(
         self,
         optimal_weights: Dict[str, float],
@@ -1089,42 +1244,14 @@ Keep the tone professional yet accessible. Use markdown formatting for the repor
 
         # If issues found and LLM available, generate suggestions
         if issues and self.llm_service:
-            prompt = f"""
-You are a financial portfolio analyst. The following portfolio optimization has potential issues:
-
-{json.dumps({"issues": issues}, indent=2)}
-
-Current allocation:
-{json.dumps(optimal_weights, indent=2)}
-
-Key metrics:
-- Expected Annual Return: {metrics.get('expected_annual_return', 0) * 100:.1f}%
-- Annual Volatility: {metrics.get('annual_volatility', 0) * 100:.1f}%
-- Number of Holdings: {num_holdings}
-
-Suggest 2-3 specific constraints to improve this portfolio. For each constraint, provide:
-- type: One of "asset", "sector", "diversification"
-- description: Clear explanation of the constraint
-- specific_value: The actual value (e.g., 0.20 for 20% max weight)
-
-Focus on practical constraints that a long-term investor would understand.
-
-Return JSON only:
-{{
-  "constraint_suggestions": [
-    {{
-      "type": "asset",
-      "description": "Limit Gold allocation to 10% to reduce concentration risk",
-      "specific_value": 0.10
-    }},
-    {{
-      "type": "diversification",
-      "description": "Require minimum 5 holdings for better diversification",
-      "specific_value": 5
-    }}
-  ]
-}}
-"""
+            prompt = self.prompt_manager.render_prompt(
+                "portfolio_optimizer/constraint_suggestions.jinja",
+                issues_data={"issues": issues},
+                optimal_weights=optimal_weights,
+                expected_annual_return=f"{metrics.get('expected_annual_return', 0) * 100:.1f}%",
+                annual_volatility=f"{metrics.get('annual_volatility', 0) * 100:.1f}%",
+                num_holdings=num_holdings
+            )
 
             try:
                 response = await self.llm_service.generate_json(prompt, use_cache=False)

@@ -1,0 +1,46 @@
+You are a financial advisor providing a portfolio analysis report for a long-term, risk-conscious investor.
+
+Portfolio Summary:
+{{ portfolio_summary | tojson(indent=2) }}
+
+Please provide:
+
+1. A concise report (3-4 paragraphs) covering:
+   - Portfolio Overview - Brief summary of the allocation strategy
+   - Risk Analysis - Assessment of volatility and diversification
+   - Return Expectations - Analysis of expected returns under different scenarios
+   - Recommendations - Key considerations for the investor
+
+2. Three to four suggested follow-up research questions that would help the investor better understand this portfolio. Each question should:
+   - Be specific and actionable
+   - Address a potential concern or area for deeper analysis
+   - Be answerable through quantitative analysis or research
+
+{% if suggest_constraints %}
+3. (Only if issues detected) Constraint Suggestions: If the portfolio has:
+   - Any single asset >25% concentration
+   - Fewer than 5 holdings
+   - Volatility >15%
+   Suggest 1-2 specific constraints to improve it. For each:
+   - type: "asset" (max single asset), "diversification" (min holdings), or "sector" (sector cap)
+   - description: Clear explanation
+   - specific_value: e.g., 0.20 for max 20% weight
+
+Add to JSON: "constraint_suggestions": [{"type": "...", "description": "...", "specific_value": ...}]
+{% endif %}
+
+Format your response as JSON:
+{
+  "report": "Your markdown-formatted report here...",
+  "follow_up_suggestions": [
+    "Question 1",
+    "Question 2",
+    "Question 3",
+    "Question 4 (optional)"
+  ]{% if suggest_constraints %},
+  "constraint_suggestions": [
+    {"type": "asset|diversification|sector", "description": "...", "specific_value": 0.20}
+  ]{% endif %}
+}
+
+Keep the tone professional yet accessible. Use markdown formatting for the report.

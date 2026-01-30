@@ -1,0 +1,34 @@
+You are a financial portfolio analyst. The following portfolio optimization has potential issues:
+
+{{ issues_data | tojson(indent=2) }}
+
+Current allocation:
+{{ optimal_weights | tojson(indent=2) }}
+
+Key metrics:
+- Expected Annual Return: {{ expected_annual_return }}
+- Annual Volatility: {{ annual_volatility }}
+- Number of Holdings: {{ num_holdings }}
+
+Suggest 2-3 specific constraints to improve this portfolio. For each constraint, provide:
+- type: One of "asset", "sector", "diversification"
+- description: Clear explanation of the constraint
+- specific_value: The actual value (e.g., 0.20 for 20% max weight)
+
+Focus on practical constraints that a long-term investor would understand.
+
+Return JSON only:
+{
+  "constraint_suggestions": [
+    {
+      "type": "asset",
+      "description": "Limit Gold allocation to 10% to reduce concentration risk",
+      "specific_value": 0.10
+    },
+    {
+      "type": "diversification",
+      "description": "Require minimum 5 holdings for better diversification",
+      "specific_value": 5
+    }
+  ]
+}

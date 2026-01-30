@@ -22,13 +22,17 @@ dependencies = [
     "statsmodels>=0.14.0",
     "scipy>=1.11.0",
     # Technical analysis
-    "pandas-ta>=0.3.14b",
+    "pandas-ta>=0.3.14b0",
     # Macro economic data
     "fredapi>=0.4.0",
     "openai>=2.16.0",
     "google-genai>=1.60.0",
     "langchain-google-genai>=4.2.0",
     "langchain>=1.2.7",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-multipart>=0.0.9",
+    "jinja2>=3.1.6",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +54,8 @@ asyncio_default_fixture_loop_scope = "function"
 # Ignore all warnings (e.g. from site-packages) except for our own code
 filterwarnings = [
     "ignore",
+    "ignore:.*mode.copy_on_write.*:UserWarning", # pandas_ta issue with pandas 3.0+
+    "ignore:.*crypt.*:DeprecationWarning",       # passlib issue with python 3.13 slated removal
     "default:::app",
     "default:::tests",
 ]

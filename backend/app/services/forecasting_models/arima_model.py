@@ -129,6 +129,13 @@ class ARIMAModel(BaseModel):
         # Limit horizon for ARIMA (best for short-term)
         forecast_horizon = min(horizon_days, self.metadata["max_horizon_days"])
 
+        # Enforce business day frequency for statsmodels
+        # This fixes ValueWarning: A date index has been provided, but it has no associated frequency information
+        if log_prices.index.freq is None:
+            log_prices = log_prices.asfreq('B')
+            # Fill any missing values created by asfreq (e.g. holidays)
+            log_prices = log_prices.ffill()
+
         # Determine if we need differencing (stationarity test)
         is_stationary, d = self._check_stationarity(log_prices)
 

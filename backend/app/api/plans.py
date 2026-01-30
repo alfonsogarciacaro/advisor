@@ -4,7 +4,8 @@ from pydantic import BaseModel
 
 from app.services.plan_service import PlanService
 from app.services.research_agent import ResearchAgent
-from app.models.plan import Plan, RiskProfile
+from app.models.plan import Plan
+from app.models.types import RiskProfile
 from app.core.dependencies import get_plan_service, get_logger, get_research_agent
 from app.services.logger_service import LoggerService
 
@@ -28,6 +29,11 @@ class PlanUpdateRequest(BaseModel):
     description: Optional[str] = None
     notes: Optional[str] = None
     risk_preference: Optional[RiskProfile] = None
+
+
+class PortfolioUpdateRequest(BaseModel):
+    """Request to update plan's initial portfolio"""
+    initial_portfolio: List[Dict[str, Any]]
 
 
 class ResearchRequest(BaseModel):
@@ -124,6 +130,33 @@ async def update_plan(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error updating plan {plan_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/plans/{plan_id}/portfolio", response_model=Dict[str, str])
+async def update_plan_portfolio(
+    plan_id: str,
+    request: PortfolioUpdateRequest,
+    plan_service: PlanService = Depends(get_plan_service),
+    logger: LoggerService = Depends(get_logger)
+):
+    """
+    Update the initial portfolio holdings for a plan.
+    """
+    try:
+        success = await plan_service.update_plan(
+            plan_id,
+            initial_portfolio=request.initial_portfolio
+        )
+        if not success:
+            raise HTTPException(status_code=404, detail="Plan not found")
+        return {"plan_id": plan_id, "status": "updated"}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error updating plan portfolio {plan_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

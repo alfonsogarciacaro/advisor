@@ -444,7 +444,180 @@ These stories can be transformed into Playwright integration tests in `/frontend
 
 ---
 
-## 10. Performance
+## 10. Strategy Templates & Playground
+
+### US-ST-01: Browse Strategy Templates
+**As a** new investor
+**I want to** see available pre-built strategy templates
+**So that** I can understand common investment approaches
+
+**Acceptance Criteria:**
+- Strategy templates are displayed with name, description, risk level
+- Each strategy shows an icon and tags
+- Can filter strategies by risk level (conservative, moderate, aggressive)
+- Strategies show brief constraint summary
+
+**Playwright Test**: `playground/strategy-templates.spec.ts`
+
+---
+
+### US-ST-02: Select Strategy Template
+**As a** user
+**I want to** use a strategy template for optimization
+**So that** I don't have to manually configure constraints
+
+**Acceptance Criteria:**
+- Clicking a strategy selects it
+- Selected strategy is visually highlighted
+- Can see strategy details (constraints summary)
+- Optimization uses strategy constraints
+
+**Playwright Test**: `playground/strategy-templates.spec.ts`
+
+---
+
+### US-HB-01: Run Historical Backtest
+**As a** user
+**I want to** test how a strategy would have performed in the past
+**So that** I can understand its historical behavior
+
+**Acceptance Criteria:**
+- Can select historical start date (date picker)
+- Quick-select buttons for preset periods (COVID, 2008 crisis, etc.)
+- Can enter investment amount
+- "Run Backtest" button starts the analysis
+- Loading state shows during backtest
+
+**Playwright Test**: `playground/historical-backtest.spec.ts`
+
+---
+
+### US-HB-02: View Backtest Results
+**As a** user
+**I want to** see detailed backtest performance metrics
+**So that** I can evaluate if the strategy meets my needs
+
+**Acceptance Criteria:**
+- Shows final portfolio value (after-tax)
+- Shows total return percentage
+- Displays max drawdown (worst case drop)
+- Shows recovery time from drawdown
+- Displays annualized return (CAGR)
+- Shows Sharpe ratio for risk-adjusted performance
+
+**Playwright Test**: `playground/historical-backtest.spec.ts`
+
+---
+
+### US-HB-03: Compare Portfolio vs Benchmark
+**As a** user
+**I want to** see my portfolio vs a benchmark (60/40)
+**So that** I understand if my strategy adds value
+
+**Acceptance Criteria:**
+- Line chart shows both portfolio and benchmark trajectories
+- Both lines are clearly labeled
+- Can toggle between pre-tax and after-tax views
+- Benchmark uses standard 60/40 SPY/AGG allocation
+
+**Playwright Test**: `playground/historical-backtest.spec.ts`
+
+---
+
+### US-HB-04: See Historical Events on Chart
+**As a** user
+**I want to** see historical events marked on the chart
+**So that** I understand context for portfolio performance
+
+**Acceptance Criteria:**
+- Key events are shown as badges (COVID, 2008 crisis, Fed rate hikes)
+- Events show date and icon
+- Events appear in chronological order
+- Events help explain portfolio movements
+
+**Playwright Test**: `playground/historical-backtest.spec.ts`
+
+---
+
+### US-TX-01: Select Account Type for Tax-Aware Backtesting
+**As a** Japanese investor
+**I want to** select my account type (taxable, NISA, iDeCo)
+**So that** I see realistic after-tax returns
+
+**Acceptance Criteria:**
+- Account type selector is visible
+- Options include: Taxable Account, NISA Growth, NISA General, iDeCo
+- Each option shows tax rate (e.g., 20.315% for taxable, 0% for NISA)
+- Selected option is highlighted
+- Tooltip explains tax advantages
+
+**Playwright Test**: `playground/tax-aware-backtest.spec.ts`
+
+---
+
+### US-TX-02: View Tax Impact on Returns
+**As a** user
+**I want to** see how taxes affect my returns
+**So that** I can make tax-efficient decisions
+
+**Acceptance Criteria:**
+- Shows pre-tax final value
+- Shows after-tax final value
+- Displays capital gains tax amount
+- Shows tax as percentage of portfolio value
+- Tax efficiency insight banner appears when taxes are high
+- Suggests tax-advantaged accounts when tax impact is significant
+
+**Playwright Test**: `playground/tax-aware-backtest.spec.ts`
+
+---
+
+### US-TX-03: Compare Taxable vs Tax-Advantaged Returns
+**As a** user
+**I want to** compare returns across different account types
+**So that** I can choose the right account for my investments
+
+**Acceptance Criteria:**
+- Can run same backtest with different account types
+- Side-by-side comparison shows tax impact
+- NISA/iDeCo show 0% tax and higher final value
+- Taxable account shows tax drag
+
+**Playwright Test**: `playground/tax-aware-backtest.spec.ts`
+
+---
+
+### US-PG-01: Switch Between Playground Modes
+**As a** user
+**I want to** switch between Future Simulation and Historical Replay
+**So that** I can explore different testing approaches
+
+**Acceptance Criteria:**
+- Tab or toggle to switch modes
+- Historical Replay shows date picker and preset periods
+- Future Simulation shows stress test options (market shock, rate changes)
+- Selection persists during session
+
+**Playwright Test**: `playground/playground-modes.spec.ts`
+
+---
+
+### US-PG-02: Use Preset Historical Periods
+**As a** user
+**I want to** quickly test major historical events
+**So that** I can see how strategies behave in crises
+
+**Acceptance Criteria:**
+- Quick-select buttons for: Pre-COVID (Jan 2020), Pre-2008 Crisis, Post-COVID Recovery
+- Each preset shows icon and label
+- Clicking preset auto-fills date picker
+- All presets use the same initial investment amount
+
+**Playwright Test**: `playground/preset-periods.spec.ts`
+
+---
+
+## 11. Performance
 
 ### US-PF-01: Fast Plan Loading
 **As a** user
@@ -487,12 +660,15 @@ These stories can be transformed into Playwright integration tests in `/frontend
 6. US-PO-03: Scenario Forecasts
 7. US-RA-02: Custom Research Question
 8. US-AI-01: View AI Report
+9. US-ST-01/02: Strategy Templates (Browse & Select)
+10. US-HB-01/02: Historical Backtesting (Run & View Results)
 
 ### Low Priority (Nice to Have)
-9. US-SP-03: Plan Notes
-10. US-NW-02: Refresh News
-11. US-RD-01/02: Responsive Design
-12. US-PF-01/02: Performance Tests
+11. US-SP-03: Plan Notes
+12. US-NW-02: Refresh News
+13. US-TX-01/02/03: Tax-Aware Backtesting
+14. US-RD-01/02: Responsive Design
+15. US-PF-01/02: Performance Tests
 
 ---
 
@@ -532,6 +708,12 @@ frontend/tests/
 ├── news/
 │   ├── view-news.spec.ts
 │   └── refresh-news.spec.ts
+├── playground/
+│   ├── strategy-templates.spec.ts
+│   ├── historical-backtest.spec.ts
+│   ├── tax-aware-backtest.spec.ts
+│   ├── playground-modes.spec.ts
+│   └── preset-periods.spec.ts
 ├── errors/
 │   ├── optimization-failure.spec.ts
 │   └── network-error.spec.ts
@@ -704,8 +886,135 @@ npx playwright test --headed
 | Settings | 3 | 60% |
 | AI Report | 2 | 50% |
 | News | 2 | 50% |
+| Strategy Templates & Playground | 10 | 90% |
 | Errors | 2 | 100% |
 | Responsive | 2 | 40% |
 | Performance | 2 | 20% |
 
 **Overall Target**: 70%+ coverage for critical paths
+
+---
+
+## 12. Multi-Account Asset Management
+
+### US-MA-01: Register Existing Asset Holdings
+**As a** Japanese investor with existing investments
+**I want** to register my current asset holdings across multiple accounts
+**So that** I can optimize my complete portfolio
+
+**Acceptance Criteria:**
+- "Edit Portfolio" button is always visible on plan detail page
+- Modal opens showing current holdings (if any) grouped by account type
+- Can add asset by selecting: ETF ticker, account type, monetary value (¥)
+- Validation prevents exceeding account limits (e.g., NISA Growth ¥1.8M/year)
+- Holdings display grouped by account with totals
+- Progress bar shows usage vs limit for each account
+- "Register Existing Assets" prompt shown for new plans before first optimization
+
+**Playwright Test**: `portfolio/register-asset-holdings.spec.ts`
+
+---
+
+### US-MA-02: View Holdings by Account Type
+**As a** multi-account investor
+**I want** to see my holdings organized by account
+**So that** I can track my asset allocation
+
+**Acceptance Criteria:**
+- Holdings displayed grouped by account type (NISA Growth, NISA General, iDeCo, Taxable)
+- Each account shows total value in base currency (¥)
+- Each account shows progress bar vs annual limit
+- Grand total displayed at bottom
+- Can see which ETFs are in which accounts
+
+**Playwright Test**: `portfolio/view-holdings-by-account.spec.ts`
+
+---
+
+### US-MA-03: Edit Portfolio Holdings
+**As a** investor
+**I want** to update my existing holdings
+**So that** my portfolio stays current
+
+**Acceptance Criteria:**
+- Can edit existing asset's monetary value
+- Can delete assets from portfolio
+- Can add new assets to any account
+- Validation ensures limits aren't exceeded
+- Save button persists changes
+- Cancel button discards changes
+
+**Playwright Test**: `portfolio/edit-portfolio-holdings.spec.ts`
+
+---
+
+## 13. Currency & FX Support
+
+### US-FX-01: View All Values in Base Currency
+**As a** Japanese investor
+**I want** to see all portfolio values in JPY
+**So that** I can easily understand my investments
+
+**Acceptance Criteria:**
+- All monetary values displayed in ¥ (JPY)
+- US ETF prices automatically converted to JPY
+- No manual currency selection needed
+- Base currency detected from tax residence (Japan → JPY)
+- All portfolio metrics show in base currency
+
+**Playwright Test**: `currency/base-currency-display.spec.ts`
+
+---
+
+### US-FX-02: Transparent FX Conversion
+**As a** investor
+**I want** the system to handle FX automatically
+**So that** I don't need to calculate exchange rates
+
+**Acceptance Criteria:**
+- No currency selector in UI (all values in base currency)
+- FX conversion happens behind the scenes
+- Historical backtest includes FX impact
+- FX risk is included in optimization
+- Current USD/JPY rate fetched and cached
+
+**Playwright Test**: `currency/transparent-fx.spec.ts`
+
+---
+
+### US-FX-03: View FX Impact in Backtest
+**As a** investor with USD assets
+**I want** to see how FX changes affect my returns
+**So that** I understand currency risk
+
+**Acceptance Criteria:**
+- Historical backtest includes FX rate movements
+- Final portfolio value reflects FX changes
+- Metrics show FX volatility impact
+- Comparison shows benefit of currency diversification
+- Taxable account shows FX drag vs NISA (no FX drag)
+
+**Playwright Test**: `currency/fx-backtest-impact.spec.ts`
+
+---
+
+## 14. Playground Enhancement
+
+### US-PG-03: Generate Random Portfolio
+**As a** new investor exploring strategies
+**I want** to quickly generate a random test portfolio
+**So that** I can experiment without manual input
+
+**Acceptance Criteria:**
+- "🎲 Generate Random Portfolio" button visible in HistoricalReplay
+- Clicking button randomly selects:
+  - Strategy template
+  - Account type
+  - Investment amount
+- Form fields pre-filled with random values
+- Can still edit values before running
+- Random selection happens quickly
+
+**Playwright Test**: `playground/random-portfolio.spec.ts`
+
+---

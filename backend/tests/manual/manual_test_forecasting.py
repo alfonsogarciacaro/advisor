@@ -8,8 +8,8 @@ import asyncio
 import sys
 import os
 
-# Add parent directory to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add backend to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from app.services.forecasting_engine import ForecastingEngine
 from app.services.history_service import HistoryService
@@ -18,6 +18,7 @@ from app.services.risk_calculators import RiskCalculator
 from app.services.config_service import ConfigService
 from app.services.storage_service import StorageService
 from app.infrastructure.storage.firestore_storage import FirestoreStorage
+from app.infrastructure.logging.std_logger import StdLogger
 
 
 async def test_dependencies():
@@ -97,7 +98,8 @@ async def test_baseline_forecast():
 
     try:
         storage = FirestoreStorage()
-        history_service = HistoryService(storage)
+        from app.services.history.yfinance_provider import YFinanceProvider
+        history_service = HistoryService(storage, StdLogger(), YFinanceProvider())
         config_service = ConfigService()
         engine = ForecastingEngine(history_service, config_service)
 
@@ -136,7 +138,8 @@ async def test_technical_indicators():
 
     try:
         storage = FirestoreStorage()
-        history_service = HistoryService(storage)
+        from app.services.history.yfinance_provider import YFinanceProvider
+        history_service = HistoryService(storage, StdLogger(), YFinanceProvider())
 
         tickers = ["SPY", "QQQ"]
 
@@ -175,7 +178,8 @@ async def test_market_regime():
 
     try:
         storage = FirestoreStorage()
-        history_service = HistoryService(storage)
+        from app.services.history.yfinance_provider import YFinanceProvider
+        history_service = HistoryService(storage, StdLogger(), YFinanceProvider())
 
         tickers = ["SPY"]
 
@@ -216,7 +220,8 @@ async def test_risk_metrics():
 
     try:
         storage = FirestoreStorage()
-        history_service = HistoryService(storage)
+        from app.services.history.yfinance_provider import YFinanceProvider
+        history_service = HistoryService(storage, StdLogger(), YFinanceProvider())
         risk_calc = RiskCalculator()
 
         tickers = ["SPY", "QQQ"]
@@ -313,7 +318,8 @@ async def test_agent_workflow():
 
         logger = StdLogger()
         storage = FirestoreStorage()
-        history_service = HistoryService(storage)
+        from app.services.history.yfinance_provider import YFinanceProvider
+        history_service = HistoryService(storage, logger, YFinanceProvider())
         config_service = ConfigService()
 
         # Create agent with all services

@@ -5,7 +5,7 @@ import traceback
 from dotenv import load_dotenv
 
 load_dotenv()
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from app.services.storage_service import StorageService
 from app.services.history_service import HistoryService

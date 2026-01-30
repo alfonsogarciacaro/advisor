@@ -6,6 +6,8 @@ from app.core.langgraph_base import LangGraphAgent
 from app.services.logger_service import LoggerService
 from app.services.storage_service import StorageService
 from app.services.config_service import ConfigService
+from app.core.prompt_manager import get_prompt_manager
+
 
 # Define the Agent State - Enhanced with forecasting fields
 class AgentState(TypedDict):
@@ -44,6 +46,7 @@ class ResearchAgent(LangGraphAgent):
         self.risk_calculator = risk_calculator
         self.config_service = config_service or ConfigService()
         self.web_search_tool = web_search_tool  # Placeholder for future web search integration
+        self.prompt_manager = get_prompt_manager()
 
     def search_node(self, state: AgentState) -> Dict[str, Any]:
         # In a real agent, this would call a search tool (e.g. Tavily, Google)
@@ -122,31 +125,13 @@ class ResearchAgent(LangGraphAgent):
         macro = state.get("macro_indicators", {})
         plan_context = state.get("plan_context", {})
 
-        # Construct prompt for LLM
-        prompt = f"""
-        You are a financial analyst. Based on the following context, generate 3 specific market scenarios
-        (Base Case, Bull Case, Bear Case) for the requested analysis.
-
-        User Query: "{query}"
-
-        Market Regime: {json.dumps(market_regime, indent=2)}
-        Macro Indicators: {json.dumps(macro, indent=2)}
-        """
-
-        # Add plan context if available
-        if plan_context:
-            prompt += f"\nCurrent Portfolio Context: {json.dumps(plan_context, indent=2)}\n"
-
-        prompt += """
-        For each scenario, provide:
-        1. A weight (probability) - must sum to 1.0
-        2. 'drift_adj': A drift adjustment factor (e.g. 0.05 for +5% annual return boost, -0.05 for -5%)
-        3. 'vol_adj': A volatility adjustment factor (e.g. 0.2 for +20% volatility increase)
-        4. Description of the scenario logic.
-
-        Format strictly as JSON with keys: "scenarios" -> Ticker -> Case Name.
-        Use "GLOBAL" as ticker key if scenarios apply to all assets, or specific tickers like "SPY" if specific.
-        """
+        prompt = self.prompt_manager.render_prompt(
+            "research_agent/market_scenarios.jinja",
+            query=query,
+            market_regime=market_regime,
+            macro_indicators=macro,
+            plan_context=plan_context
+        )
 
         # Prepare tools if available
         tools = None

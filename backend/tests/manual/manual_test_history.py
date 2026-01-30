@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Add the backend directory to sys.path to allow imports from app
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from app.services.storage_service import StorageService
 from app.services.history_service import HistoryService

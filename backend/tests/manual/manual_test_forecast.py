@@ -4,7 +4,7 @@ import os
 from unittest.mock import MagicMock
 
 # Add backend to path
-sys.path.append(os.path.join(os.getcwd(), "backend"))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 async def test_forecast():
     from app.services.history_service import HistoryService

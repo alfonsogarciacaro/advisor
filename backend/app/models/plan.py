@@ -3,16 +3,14 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional, Union
 
-# Import existing models
-from app.models.portfolio import PortfolioAsset, OptimizationResult, ScenarioForecast
-
-class RiskProfile(str, Enum):
-    """Risk tolerance levels for long-term family investors"""
-    VERY_CONSERVATIVE = "very_conservative"  # Max capital preservation, accept lower returns
-    CONSERVATIVE = "conservative"  # Focus on stability, some growth
-    MODERATE = "moderate"  # Balanced approach
-    GROWTH = "growth"  # Accept higher volatility for better returns
-    AGGRESSIVE = "aggressive"  # Maximum growth acceptance
+# Import shared types
+from app.models.types import RiskProfile, TaxAccountType
+from app.models.portfolio import (
+    PortfolioConstraints,
+    AssetHolding,
+    OptimizationResult,
+    ScenarioForecast
+)
 
 class InvestmentFrequency(str, Enum):
     """Recurring investment frequency options"""
@@ -20,15 +18,6 @@ class InvestmentFrequency(str, Enum):
     BIWEEKLY = "biweekly"
     MONTHLY = "monthly"
     QUARTERLY = "quarterly"
-
-class TaxAccountType(str, Enum):
-    """Tax-advantaged account types, primarily for Japanese market"""
-    TAXABLE = "taxable"  # Ordinary taxable account
-    NISA_GENERAL = "nisa_general"  # New NISA (General Account)
-    NISA_GROWTH = "nisa_growth"  # New NISA (Growth Account)
-    IDECO = "ideco"  # iDeCo (Individual Defined Contribution pension)
-    DC_PENSION = "dc_pension"  # Company DC pension
-    OTHER = "other"  # Other country-specific accounts
 
 class TaxAccount(BaseModel):
     """Configuration for a tax-advantaged account"""
@@ -63,41 +52,6 @@ class ResearchRun(BaseModel):
     refined_forecasts: Optional[Dict[str, Any]] = None
     follow_up_suggestions: Optional[List[str]] = None
 
-class PortfolioConstraints(BaseModel):
-    """
-    Constraints for portfolio optimization to prevent flawed allocations.
-
-    Allows users and LLM to guide the optimization toward more practical
-    portfolios by limiting concentrations, sector exposure, and ensuring
-    diversification.
-    """
-    # Asset-level constraints
-    max_asset_weight: Optional[float] = Field(None, ge=0, le=1, description="Maximum weight for any single asset (e.g., 0.20 for max 20%)")
-    excluded_assets: List[str] = Field(default_factory=list, description="Assets to exclude from optimization")
-
-    # Sector/asset class constraints
-    sector_constraints: Dict[str, Dict[str, float]] = Field(
-        default_factory=dict,
-        description="Sector-level constraints e.g., {'Technology': {'max': 0.30}, 'Bonds': {'min': 0.10}}"
-    )
-
-    # Diversification constraints
-    min_holdings: int = Field(3, ge=1, le=50, description="Minimum number of holdings")
-    max_holdings: int = Field(20, ge=1, le=100, description="Maximum number of holdings")
-
-    # Practical constraints
-    min_position_size: float = Field(0.01, ge=0, le=1, description="Minimum position size (1% default to avoid dust)")
-
-    # Risk constraints
-    max_volatility: Optional[float] = Field(None, ge=0, le=1, description="Maximum portfolio volatility")
-    max_drawdown: Optional[float] = Field(None, ge=0, le=1, description="Maximum acceptable drawdown")
-
-    # LLM-suggested guidelines
-    llm_guidelines: List[str] = Field(default_factory=list, description="Constraints suggested by LLM analysis")
-
-    # Metadata
-    last_applied_at: Optional[datetime] = None
-    generated_from: Optional[str] = Field(None, description="Where these constraints came from (user/llm)")
 
 class Plan(BaseModel):
     """
@@ -115,11 +69,14 @@ class Plan(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    # Currency Configuration
+    base_currency: str = "JPY"  # Base currency for all values (auto from tax residence)
+
     # Portfolio Configuration
     risk_preference: RiskProfile = RiskProfile.MODERATE
 
     # Initial State (can be empty for new investments)
-    initial_portfolio: Optional[List[PortfolioAsset]] = None  # Existing holdings
+    initial_portfolio: Optional[List[AssetHolding]] = None
     initial_amount: Optional[float] = None  # Cash amount to invest
 
     # Optimization Results

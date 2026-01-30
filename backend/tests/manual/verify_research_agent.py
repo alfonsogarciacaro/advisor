@@ -5,7 +5,7 @@ import logging
 from typing import Dict, Any, List, Optional
 
 # Add project root to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from app.core.dependencies import get_agent_service, get_llm_service
 from app.services.llm_service import MockLLMProvider

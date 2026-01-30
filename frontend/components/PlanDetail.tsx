@@ -1,10 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Plan, OptimizationResult, TaxAccount } from '../lib/api-client';
+import { Plan, OptimizationResult, TaxAccount, AssetHolding, updatePlanPortfolio } from '../lib/api-client';
 import PortfolioOptimizer from './PortfolioOptimizer';
 import ResearchPanel from './ResearchPanel';
 import AccountManager from './AccountManager';
+import Playground from './Playground';
+import PortfolioEditor from './PortfolioEditor';
+import HoldingsByAccount from './HoldingsByAccount';
 
 interface PlanDetailProps {
     plan: Plan;
@@ -12,13 +15,14 @@ interface PlanDetailProps {
     onPlanUpdate?: (plan: Plan) => void;
 }
 
-type ViewMode = 'overview' | 'accounts' | 'settings';
+type ViewMode = 'overview' | 'accounts' | 'settings' | 'playground';
 
 export default function PlanDetail({ plan, onBack, onPlanUpdate }: PlanDetailProps) {
     const [showOptimizer, setShowOptimizer] = useState(!plan.optimization_result);
     const [deepDiveMetric, setDeepDiveMetric] = useState<string | null>(null);
     const [viewMode, setViewMode] = useState<ViewMode>('overview');
     const [localPlan, setLocalPlan] = useState<Plan>(plan);
+    const [showPortfolioEditor, setShowPortfolioEditor] = useState(false);
 
     const handleAccountsUpdate = (accounts: TaxAccount[]) => {
         const updated = { ...localPlan, tax_accounts: accounts, updated_at: new Date().toISOString() };
@@ -93,6 +97,15 @@ export default function PlanDetail({ plan, onBack, onPlanUpdate }: PlanDetailPro
                     )}
                 </div>
                 <div className="flex gap-2">
+                    <button
+                        onClick={() => setShowPortfolioEditor(true)}
+                        className="btn btn-outline btn-sm"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+                        </svg>
+                        Edit Portfolio
+                    </button>
                     {localPlan.optimization_result && (
                         <button
                             onClick={() => setShowOptimizer(!showOptimizer)}
@@ -116,6 +129,46 @@ export default function PlanDetail({ plan, onBack, onPlanUpdate }: PlanDetailPro
                         {localPlan.research_history.length !== 1 ? 's' : ''}.
                         Latest: {new Date(localPlan.research_history[localPlan.research_history.length - 1].timestamp).toLocaleDateString()}
                     </span>
+                </div>
+            )}
+
+            {/* Current Holdings Display */}
+            {localPlan.initial_portfolio && localPlan.initial_portfolio.length > 0 && (
+                <div className="card bg-base-100 shadow-xl border border-base-200">
+                    <div className="card-body">
+                        <h2 className="card-title">Current Holdings</h2>
+                        <HoldingsByAccount
+                            holdings={localPlan.initial_portfolio}
+                            baseCurrency={localPlan.base_currency}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* Add Existing Assets Prompt (before first optimization) */}
+            {!localPlan.optimization_result && (!localPlan.initial_portfolio || localPlan.initial_portfolio.length === 0) && (
+                <div className="alert alert-info">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+                    </svg>
+                    <div>
+                        <h3 className="font-bold">Do you have existing investments?</h3>
+                        <div className="text-sm">Register your existing asset holdings across multiple accounts before optimizing.</div>
+                        <div className="flex gap-2 mt-2">
+                            <button
+                                className="btn btn-primary btn-sm"
+                                onClick={() => setShowPortfolioEditor(true)}
+                            >
+                                Register Existing Assets
+                            </button>
+                            <button
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => setShowOptimizer(true)}
+                            >
+                                Start Fresh
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -150,6 +203,16 @@ export default function PlanDetail({ plan, onBack, onPlanUpdate }: PlanDetailPro
                         <path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 018.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 001.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 010 3.46" />
                     </svg>
                     Settings
+                </button>
+                <button
+                    role="tab"
+                    className={`tab ${viewMode === 'playground' ? 'tab-active' : ''}`}
+                    onClick={() => setViewMode('playground')}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                    </svg>
+                    Playground
                 </button>
             </div>
 
@@ -251,6 +314,13 @@ export default function PlanDetail({ plan, onBack, onPlanUpdate }: PlanDetailPro
                         </div>
                     </div>
                 </div>
+            )}
+
+            {viewMode === 'playground' && (
+                <Playground
+                    initialAmount={localPlan.initial_amount || 10000}
+                    currency="USD"
+                />
             )}
 
             {viewMode === 'overview' && (
@@ -438,6 +508,23 @@ export default function PlanDetail({ plan, onBack, onPlanUpdate }: PlanDetailPro
                     }}
                 />
             </div>
+
+            {/* Portfolio Editor Modal */}
+            {showPortfolioEditor && (
+                <PortfolioEditor
+                    planId={localPlan.plan_id}
+                    initialPortfolio={localPlan.initial_portfolio || undefined}
+                    baseCurrency={localPlan.base_currency}
+                    onSave={async (holdings) => {
+                        await updatePlanPortfolio(localPlan.plan_id, holdings);
+                        const updated = { ...localPlan, initial_portfolio: holdings, updated_at: new Date().toISOString() };
+                        setLocalPlan(updated);
+                        onPlanUpdate?.(updated);
+                        setShowPortfolioEditor(false);
+                    }}
+                    onCancel={() => setShowPortfolioEditor(false)}
+                />
+            )}
         </div>
     );
 }

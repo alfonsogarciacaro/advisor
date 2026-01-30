@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { FinancialNews } from "../components/financial-news";
+import { FinancialNews } from "../components/FinancialNews";
 import PlanManager from "../components/PlanManager";
 import PlanDetail from "../components/PlanDetail";
 import { Plan } from "../lib/api-client";

@@ -1,10 +1,6 @@
 """Test expense ratio integration in portfolio optimizer"""
 import asyncio
 from app.services.config_service import ConfigService
-from app.services.portfolio_optimizer import PortfolioOptimizerService
-from app.services.history_service import HistoryService
-from app.services.storage_service import StorageService
-
 
 async def test_expense_ratio_config():
     """Test that expense ratios are loaded from config"""
