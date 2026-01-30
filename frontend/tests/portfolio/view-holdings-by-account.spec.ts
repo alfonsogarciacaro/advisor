@@ -10,10 +10,8 @@ import { createPlan } from '../test-utils';
  * - Each account shows progress bar vs annual limit
  * - Grand total displayed at bottom
  * - Can see which ETFs are in which accounts
- *
- * SKIPPED: Tests require PortfolioEditor to add holdings first, which is broken.
  */
-test.describe.skip('View Holdings by Account Type', () => {
+test.describe('View Holdings by Account Type', () => {
     test.beforeEach(async ({ page }) => {
         const planName = `Holdings View Test ${Date.now()}`;
         await createPlan(page, planName);
@@ -41,20 +39,20 @@ test.describe.skip('View Holdings by Account Type', () => {
         await expect(page.getByRole('heading', { name: /Current Holdings/i })).toBeVisible();
 
         // Should see account names
-        await expect(page.getByText(/NISA Growth/i)).toBeVisible();
-        await expect(page.getByText(/Taxable/i)).toBeVisible();
+        await expect(page.getByRole('heading', { name: /NISA Growth/i })).toBeVisible();
+        await expect(page.getByRole('heading', { name: /Taxable/i })).toBeVisible();
     });
 
     test('should show total value for each account in base currency', async ({ page }) => {
         // Should see values with ¥ symbol
-        await expect(page.getByText(/¥800,000/i).or(page.getByText(/¥800,000/i))).toBeVisible();
-        await expect(page.getByText(/¥500,000/i).or(page.getByText(/¥500,000/i))).toBeVisible();
+        await expect(page.getByText(/¥800,000/i)).toBeVisible();
+        await expect(page.getByText(/¥500,000/i)).toBeVisible();
     });
 
     test('should display progress bar for accounts with limits', async ({ page }) => {
         // NISA Growth has annual limit, should show progress bar
         // Find the card containing NISA Growth text and check for progress within it
-        const nisaCard = page.locator('.card').filter({ hasText: /NISA Growth/i });
+        const nisaCard = page.locator('.card').filter({ has: page.getByRole('heading', { name: /NISA Growth/i }) });
         await expect(nisaCard.locator('progress')).toBeVisible();
 
         // Should show usage text
@@ -66,14 +64,14 @@ test.describe.skip('View Holdings by Account Type', () => {
         await expect(page.getByText(/Total Portfolio Value/i)).toBeVisible();
 
         // Should see combined value (800000 + 500000 = 1300000)
-        await expect(page.getByText(/¥1,300,000/i).or(page.getByText(/¥1,300,000/i))).toBeVisible();
+        await expect(page.getByText(/¥1,300,000/i)).toBeVisible();
     });
 
     test('should display ETF tickers within their respective accounts', async ({ page }) => {
         // Each holding should show ticker within its account card
         // The ticker should be visible as part of the holdings list
-        const nisaCard = page.locator('.card').filter({ hasText: /NISA Growth/i });
-        const taxableCard = page.locator('.card').filter({ hasText: /Taxable/i });
+        const nisaCard = page.locator('.card').filter({ has: page.getByRole('heading', { name: /NISA Growth/i }) });
+        const taxableCard = page.locator('.card').filter({ has: page.getByRole('heading', { name: /Taxable/i }) });
 
         // Each card should have at least one ticker displayed
         await expect(nisaCard.locator('[class*="font-medium"]').first()).toBeVisible();
@@ -92,11 +90,12 @@ test.describe.skip('View Holdings by Account Type', () => {
         await page.getByRole('button', { name: /Save Portfolio/i }).click();
 
         // NISA Growth should show updated total (800000 + 400000 = 1200000)
-        const nisaCard = page.locator('.card').filter({ hasText: /NISA Growth/i });
-        await expect(nisaCard.getByText(/¥1,200,000/i).or(nisaCard.getByText(/¥1,200,000/i))).toBeVisible();
+        const nisaCard = page.locator('.card').filter({ has: page.getByRole('heading', { name: /NISA Growth/i }) });
+        // Use first() because NISA accounts now show usage (e.g. 1.2M / 2.4M) which also contains the number
+        await expect(nisaCard.getByText(/¥1,200,000/i).first()).toBeVisible();
 
         // Grand total should also update (1200000 + 500000 = 1700000)
-        await expect(page.getByText(/¥1,700,000/i).or(page.getByText(/¥1,700,000/i))).toBeVisible();
+        await expect(page.getByText(/¥1,700,000/i)).toBeVisible();
     });
 
     test('should show empty state when no holdings', async ({ page }) => {
@@ -123,10 +122,10 @@ test.describe.skip('View Holdings by Account Type', () => {
         await page.getByRole('button', { name: /Save Portfolio/i }).click();
 
         // Should see updated value
-        const nisaCard = page.locator('.card').filter({ hasText: /NISA Growth/i });
-        await expect(nisaCard.getByText(/¥1,200,000/i).or(nisaCard.getByText(/¥1,200,000/i))).toBeVisible();
+        const nisaCard = page.locator('.card').filter({ has: page.getByRole('heading', { name: /NISA Growth/i }) });
+        await expect(nisaCard.getByText(/¥1,200,000/i).first()).toBeVisible();
 
         // Grand total should also update
-        await expect(page.getByText(/¥1,700,000/i).or(page.getByText(/¥1,700,000/i))).toBeVisible();
+        await expect(page.getByText(/¥1,700,000/i)).toBeVisible();
     });
 });

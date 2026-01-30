@@ -10,14 +10,8 @@ import { createPlan } from '../test-utils';
  * - Historical backtest includes FX impact
  * - FX risk is included in optimization
  * - Current USD/JPY rate fetched and cached
- *
- * SKIPPED: Tests require PortfolioEditor to work properly, which depends on:
- * 1. Backend ETF data loading correctly
- * 2. "Add Asset" button creating new rows (currently broken)
- *
- * TODO: Fix PortfolioEditor integration or mock backend responses
  */
-test.describe.skip('Transparent FX Conversion', () => {
+test.describe('Transparent FX Conversion', () => {
     test.beforeEach(async ({ page }) => {
         const planName = `FX Test ${Date.now()}`;
         await createPlan(page, planName);
@@ -27,11 +21,14 @@ test.describe.skip('Transparent FX Conversion', () => {
         // Portfolio editor should not have currency selection
         await page.getByRole('button', { name: /Edit Portfolio/i }).click();
 
+        // Click Add Asset so the form appears
+        await page.getByRole('button', { name: /Add Asset/i }).click();
+
         // Should only see JPY in label
         await expect(page.getByLabel(/Value \(JPY\)/i)).toBeVisible();
 
         // No currency selector dropdown
-        const currencySelect = page.getByLabel(/Currency/i);
+        const currencySelect = page.locator('.modal-box').getByLabel(/Currency/i);
         const count = await currencySelect.count();
 
         // Optimizer might still have currency selector, but portfolio editor should not
@@ -105,6 +102,6 @@ test.describe.skip('Transparent FX Conversion', () => {
 
         // Total should be in ¥
         await expect(page.getByText(/Total Portfolio Value/i)).toBeVisible();
-        await expect(page.getByText(/¥500,000/i)).toBeVisible();
+        await expect(page.locator('.bg-base-300').getByText(/¥500,000/i).last()).toBeVisible();
     });
 });

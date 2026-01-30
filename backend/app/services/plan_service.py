@@ -4,8 +4,8 @@ from typing import Dict, Any, List, Optional
 from app.services.storage_service import StorageService
 from app.services.logger_service import LoggerService
 from app.services.config_service import ConfigService
-from app.models.plan import Plan, ResearchRun
-from app.models.types import RiskProfile
+from app.models.types import RiskProfile, TaxAccountType
+from app.models.plan import Plan, ResearchRun, TaxAccount
 from app.core.utils import sanitize_numpy
 
 
@@ -58,6 +58,39 @@ class PlanService:
 
         now = datetime.datetime.now(datetime.timezone.utc)
 
+        # Initialize default tax accounts
+        tax_accounts = [
+            TaxAccount(
+                account_type=TaxAccountType.NISA_GROWTH,
+                name="NISA Growth",
+                annual_limit=2400000.0,
+                available_space=2400000.0,
+                current_balance=0.0
+            ),
+            TaxAccount(
+                account_type=TaxAccountType.NISA_GENERAL,
+                name="NISA Tsumitate",
+                annual_limit=1200000.0,
+                available_space=1200000.0,
+                current_balance=0.0
+            ),
+            TaxAccount(
+                account_type=TaxAccountType.IDECO,
+                name="iDeCo",
+                annual_limit=276000.0,
+                available_space=276000.0,
+                current_balance=0.0,
+                contribution_deductible=True
+            ),
+            TaxAccount(
+                account_type=TaxAccountType.TAXABLE,
+                name="Taxable Account",
+                annual_limit=None,
+                available_space=0.0, # Not used when limit is None
+                current_balance=0.0
+            ),
+        ]
+
         plan = Plan(
             plan_id=plan_id,
             user_id=user_id,
@@ -71,7 +104,7 @@ class PlanService:
             research_history=[],
             optimization_result=None,
             recurring_investment=None,
-            tax_accounts=None,
+            tax_accounts=tax_accounts,
             notes=None
         )
 

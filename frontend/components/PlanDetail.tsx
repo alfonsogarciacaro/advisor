@@ -140,6 +140,16 @@ export default function PlanDetail({ plan, onBack, onPlanUpdate }: PlanDetailPro
                         <HoldingsByAccount
                             holdings={localPlan.initial_portfolio}
                             baseCurrency={localPlan.base_currency}
+                            accountLimits={localPlan.tax_accounts?.reduce((acc, account) => {
+                                if (account.annual_limit) {
+                                    acc[account.account_type] = {
+                                        annual_limit: account.annual_limit,
+                                        used_space: account.annual_limit - account.available_space,
+                                        available_space: account.available_space
+                                    };
+                                }
+                                return acc;
+                            }, {} as Record<string, { annual_limit: number; used_space: number; available_space: number }>)}
                         />
                     </div>
                 </div>

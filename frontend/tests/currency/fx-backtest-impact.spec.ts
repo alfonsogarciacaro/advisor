@@ -14,10 +14,8 @@ import { createPlan } from '../test-utils';
  * NOTE: This story requires running actual backtests which can take 60+ seconds.
  * Most tests are skipped due to execution time and complexity. This would be better
  * tested with mocked backend responses or dedicated E2E tests with longer timeouts.
- *
- * SKIPPED: Requires long-running backtests and complex backend setup
  */
-test.describe.skip('View FX Impact in Backtest', () => {
+test.describe('View FX Impact in Backtest', () => {
     test.beforeEach(async ({ page }) => {
         const planName = `FX Backtest Test ${Date.now()}`;
         await createPlan(page, planName);
