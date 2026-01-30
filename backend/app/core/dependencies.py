@@ -71,15 +71,24 @@ def get_storage_service() -> StorageService:
     return FirestoreStorage()
 
 @lru_cache()
-def get_currency_service(
-    storage_service: StorageService = Depends(get_storage_service),
-    logger: LoggerService = Depends(get_logger)
-):
+def get_currency_service() -> Any:
+    storage_service = get_storage_service()
+    logger_service = get_logger()
+    
+    # Choose provider based on config
+    # Default to Mock unless explicitly enabled (Safety first)
+    enable_yfinance = os.getenv("ENABLE_YFINANCE", "false").lower() in ["1", "true", "yes"]
+    
+    if enable_yfinance:
+        from app.services.currency.yfinance_currency_provider import YFinanceCurrencyProvider
+        provider = YFinanceCurrencyProvider()
+    else:
+        from app.services.currency.mock_currency_provider import MockCurrencyProvider
+        provider = MockCurrencyProvider()
+        
     from app.services.currency_service import CurrencyService
-    return CurrencyService(
-        storage_service=storage_service,
-        logger_service=logger
-    )
+    return CurrencyService(storage_service, logger_service, provider)
+
 
 @lru_cache()
 def get_news_service() -> NewsService:

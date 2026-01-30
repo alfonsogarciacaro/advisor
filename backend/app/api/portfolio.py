@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Dict, Optional, Any
 from app.services.portfolio_optimizer import PortfolioOptimizerService
 from app.services.history_service import HistoryService
+from app.services.currency_service import CurrencyService
 from app.core.dependencies import get_portfolio_optimizer_service, get_storage_service, get_logger, get_config_service, get_currency_service, get_history_service
 from app.services.storage_service import StorageService
 from app.services.logger_service import LoggerService
@@ -187,6 +188,17 @@ async def get_available_etfs(
         prices = history_service.get_latest_prices(symbols)
         logger.info(f"Fetched prices for {len(prices)} ETFs")
 
+        # Pre-fetch FX rates we might need (avoid repeated lookups in loop)
+        fx_rates = {}
+        currencies_needed = set(
+            CurrencyService.get_market_currency(etf.market)
+            for etf in etf_configs
+        )
+        for curr in currencies_needed:
+            if curr != base_currency:
+                fx_rates[curr] = await currency_service.get_current_rate(curr, base_currency)
+
+
         # Get current prices and convert to base currency
         etfs = []
         for etf in etf_configs:
@@ -195,11 +207,11 @@ async def get_available_etfs(
                 logger.warning(f"No price for {etf.symbol}")
                 continue
 
-            native_currency = "USD" if etf.market == 'US' else "JPY"
+            native_currency = CurrencyService.get_market_currency(etf.market)
 
             # Convert to base currency if needed
             if native_currency != base_currency:
-                rate = await currency_service.get_current_rate(native_currency, base_currency)
+                rate = fx_rates.get(native_currency, 1.0)
                 price_base = native_price * rate
             else:
                 price_base = native_price

@@ -189,6 +189,7 @@ export default function PortfolioEditor({ planId, initialPortfolio = [], onSave,
                                             <label className="label"><span className="label-text">ETF</span></label>
                                             <select
                                                 className="select select-bordered"
+                                                aria-label="ETF"
                                                 value={holding.ticker}
                                                 onChange={(e) => updateHolding(index, 'ticker', e.target.value)}
                                             >
@@ -206,6 +207,7 @@ export default function PortfolioEditor({ planId, initialPortfolio = [], onSave,
                                             <label className="label"><span className="label-text">Account</span></label>
                                             <select
                                                 className="select select-bordered"
+                                                aria-label="Account"
                                                 value={holding.account_type}
                                                 onChange={(e) => updateHolding(index, 'account_type', e.target.value)}
                                             >
@@ -215,12 +217,14 @@ export default function PortfolioEditor({ planId, initialPortfolio = [], onSave,
                                             </select>
                                         </div>
 
+
                                         {/* Monetary Value */}
                                         <div className="form-control">
                                             <label className="label"><span className="label-text">Value ({baseCurrency})</span></label>
                                             <input
                                                 type="number"
                                                 className="input input-bordered"
+                                                aria-label={`Value (${baseCurrency})`}
                                                 placeholder={`e.g., ${currencySymbol}1,000,000`}
                                                 value={holding.monetary_value}
                                                 onChange={(e) => updateHolding(index, 'monetary_value', e.target.value)}
@@ -228,6 +232,7 @@ export default function PortfolioEditor({ planId, initialPortfolio = [], onSave,
                                                 step="0.01"
                                             />
                                         </div>
+
                                     </div>
 
                                     {/* Account Limit Warning */}

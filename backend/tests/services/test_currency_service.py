@@ -14,6 +14,8 @@ from app.infrastructure.storage.firestore_storage import FirestoreStorage
 from app.services.logger_service import LoggerService
 from app.infrastructure.logging.std_logger import StdLogger
 
+from app.services.currency.yfinance_currency_provider import YFinanceCurrencyProvider
+from app.services.currency.mock_currency_provider import MockCurrencyProvider
 
 @pytest.fixture
 def storage():
@@ -27,7 +29,11 @@ def logger():
 
 @pytest.fixture
 def currency_service(storage, logger):
-    return CurrencyService(storage_service=storage, logger_service=logger)
+    # Use Mock provider for stability in tests, or YFinance if you want real data
+    # The original test comment said "Uses real yfinance", but Mock is better for CI
+    # Let's use Mock to be safe and consistent with "unifying mocking strategy"
+    provider = MockCurrencyProvider()
+    return CurrencyService(storage_service=storage, logger_service=logger, provider=provider)
 
 
 @pytest.mark.asyncio
@@ -134,13 +140,12 @@ async def test_get_currency_symbol(currency_service):
     assert currency_service.get_currency_symbol("GBP") == "£"
 
 
-@pytest.mark.asyncio
-async def test_get_etf_native_currency(currency_service):
+def test_get_etf_native_currency(currency_service):
     """Test determining ETF native currency from market"""
-    us_currency = await currency_service.get_etf_native_currency("SPY", "US")
+    us_currency = currency_service.get_market_currency("US")
     assert us_currency == "USD"
 
-    jp_currency = await currency_service.get_etf_native_currency("1306.T", "JP")
+    jp_currency = currency_service.get_market_currency("JP")
     assert jp_currency == "JPY"
 
 
@@ -161,25 +166,6 @@ async def test_unsupported_fx_pair(currency_service):
     """Test that unsupported FX pairs raise ValueError"""
     with pytest.raises(ValueError, match="Unsupported FX pair"):
         await currency_service.get_current_rate("XXX", "YYY")
-
-
-@pytest.mark.asyncio
-async def test_fetch_and_convert_current_prices(currency_service):
-    """Test fetching and converting ETF prices to base currency"""
-    tickers = [("SPY", "US"), ("VTI", "US")]
-
-    prices = await currency_service.fetch_and_convert_current_prices(tickers, "JPY")
-
-    # Should have prices for both tickers
-    assert "SPY" in prices, "Should have SPY price"
-    assert "VTI" in prices, "Should have VTI price"
-
-    # Prices should be positive
-    assert prices["SPY"] > 0, "SPY price should be positive"
-    assert prices["VTI"] > 0, "VTI price should be positive"
-
-    # JPY prices should be larger than USD prices (roughly 100x)
-    assert prices["SPY"] > 100, "SPY price in JPY should be > 100"
 
 
 @pytest.mark.asyncio

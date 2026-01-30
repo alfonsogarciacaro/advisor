@@ -21,6 +21,6 @@ Only 3rd party providers will be mocked, but this is handled automatically in th
 - If a new endpoint is added, add a test for it in `backend/tests/test_endpoints.py`.
 
 - If a new fronted feature is added, first add a story to `docs/USER_STORIES.md` and later add tests for it in `frontend/tests/`.
-> Use aria labels to locate elements instead of style classes. Make the changes necessary in the code to make tests work, but if some require too much contorsion, skip them and leave a comment for future revisit.
+> Use good practices (e.g. aria labels) to locate elements instead of brittle style classes. Make the changes necessary in the code to make tests work, but if some require too much contorsion, skip them and leave a comment for future revisit.
 > Note frontend tests are actually integration tests using playwright and a test backend server, which will usually be running in the background (warn user if that's not the case, don't start it by yourself as it can mess with other agents), see `backend/start_test_server.py`. Run frontend tests with `npx playwright test` (plus arg to filter by file) until all test run. 
 
