@@ -12,10 +12,9 @@ import remarkGfm from 'remark-gfm';
 interface PortfolioOptimizerProps {
     initialAmount?: number;
     initialCurrency?: string;
-    fast?: boolean;  // Fast mode for testing (skip forecasting/LLM, reduce simulations)
 }
 
-export default function PortfolioOptimizer({ initialAmount = 10000, initialCurrency = 'USD', fast = false }: PortfolioOptimizerProps) {
+export default function PortfolioOptimizer({ initialAmount = 10000, initialCurrency = 'USD' }: PortfolioOptimizerProps) {
     const [amount, setAmount] = useState<number>(initialAmount);
     const [currency, setCurrency] = useState<string>(initialCurrency);
     const [jobId, setJobId] = useState<string | null>(null);
@@ -37,7 +36,7 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
         setResult(null);
 
         try {
-            const response = await optimizePortfolio(amount, currency, fast);
+            const response = await optimizePortfolio(amount, currency);
             setJobId(response.job_id);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to start optimization');

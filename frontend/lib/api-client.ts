@@ -256,7 +256,6 @@ export interface OptimizationResult {
 export async function optimizePortfolio(
     amount: number,
     currency: string,
-    fast: boolean = false,
     historicalDate?: string,
     useStrategy?: string,
     accountType?: string
@@ -269,7 +268,6 @@ export async function optimizePortfolio(
         body: JSON.stringify({
             amount,
             currency,
-            fast,
             historical_date: historicalDate,
             use_strategy: useStrategy,
             account_type: accountType

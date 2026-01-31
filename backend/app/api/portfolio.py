@@ -28,13 +28,17 @@ async def optimize_portfolio(
         use_strategy: Strategy template ID to use (e.g., "conservative_income")
         account_type: Account type for tax calculations (e.g., "taxable", "nisa_growth")
     """
+    import os
     try:
+        # Check for FAST_OPTIMIZE env var (used in testing)
+        fast_mode = os.environ.get("FAST_OPTIMIZE", "false").lower() == "true"
+        
         job_id = await optimizer_service.start_optimization(
             amount=request.amount,
             currency=request.currency,
             excluded_tickers=request.excluded_tickers or [],
             plan_id=request.plan_id,
-            fast=request.fast or False,
+            fast=fast_mode,
             historical_date=request.historical_date,
             use_strategy_template=request.use_strategy,
             account_type=request.account_type

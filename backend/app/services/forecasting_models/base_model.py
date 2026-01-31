@@ -27,6 +27,16 @@ class BaseModel(ABC):
             "requires_history": True,
             "supports_parallel": True,
         }
+        self._storage_service = None
+
+    def set_storage_service(self, storage_service: Any):
+        """
+        Set storage service for caching.
+        
+        Args:
+            storage_service: Storage service instance
+        """
+        self._storage_service = storage_service
 
     @abstractmethod
     async def forecast(

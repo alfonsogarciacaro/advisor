@@ -60,6 +60,8 @@ class ForecastingEngine:
             name: Model name/identifier
             model: Model instance
         """
+        if self.storage_service:
+            model.set_storage_service(self.storage_service)
         self.models[name] = model
 
     def _load_config(self) -> Dict[str, Any]:

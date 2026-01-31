@@ -35,5 +35,5 @@ if __name__ == "__main__":
     # Run the server
     port = 8001
     print(f"Starting server on port {port}...")
-    uvicorn.run("app.main:app", port=port, reload=True)
+    uvicorn.run("app.main:app", port=port, reload=True, log_level="info")
 

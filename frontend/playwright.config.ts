@@ -7,6 +7,10 @@ export default defineConfig({
     retries: process.env.CI ? 2 : 0,
     workers: process.env.CI ? 1 : 2,
     reporter: 'line',
+    timeout: process.env.CI ? 60000 : 30000,
+    expect: {
+        timeout: process.env.CI ? 10000 : 5000,
+    },
     use: {
         baseURL: 'http://localhost:3001',
         trace: 'on-first-retry',
@@ -22,12 +26,12 @@ export default defineConfig({
         url: 'http://localhost:3001',
         reuseExistingServer: false,
         stderr: 'pipe',
+        timeout: 120 * 1000,
         wait: {
             stdout: /ready/i
         },
         env: {
             NEXT_PUBLIC_API_URL: 'http://localhost:8001',
-            NEXT_PUBLIC_FAST_OPTIMIZE: 'true',
         },
     },
 });

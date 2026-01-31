@@ -350,7 +350,6 @@ export default function PlanDetail({ plan, onBack, onPlanUpdate }: PlanDetailPro
                                         <PortfolioOptimizer
                                             initialAmount={localPlan.initial_amount || 10000}
                                             initialCurrency="USD"
-                                            fast={process.env.NEXT_PUBLIC_FAST_OPTIMIZE === 'true'}
                                         />
                                     </div>
                                 </div>

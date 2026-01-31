@@ -85,7 +85,6 @@ class OptimizationRequest(BaseModel):
     excluded_tickers: Optional[List[str]] = Field(default=[], description="List of tickers to exclude from optimization")
     plan_id: Optional[str] = Field(None, description="Plan ID to get constraints from")
     constraints: Optional[PortfolioConstraints] = None
-    fast: Optional[bool] = Field(False, description="Use fast mode (skip forecasting, LLM, reduce simulations) for testing")
     historical_date: Optional[str] = Field(None, description="Historical date for backtesting (YYYY-MM-DD)")
     use_strategy: Optional[str] = Field(None, description="Strategy template to use (e.g., 'conservative_income')")
     account_type: Optional[str] = Field(None, description="Account type for tax calculations (e.g., 'taxable', 'nisa_growth')")

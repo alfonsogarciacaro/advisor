@@ -3,7 +3,11 @@
 import numpy as np
 import pandas as pd
 import warnings
-from typing import Dict, Any, List, Optional, Tuple
+
+import json
+import datetime
+from typing import Dict, Any, List, Optional, Tuple, Union
+
 from scipy import stats
 from .base_model import BaseModel
 
@@ -139,8 +143,14 @@ class ARIMAModel(BaseModel):
         # Determine if we need differencing (stationarity test)
         is_stationary, d = self._check_stationarity(log_prices)
 
-        # Auto-tune ARIMA parameters
+        # Try to get cached parameters
+        cached_params = None
         if auto_tune:
+            cached_params = await self._get_cached_params(ticker)
+            
+        if cached_params:
+            p, d, q = cached_params
+        elif auto_tune:
             best_order = self._auto_tune_arima(
                 log_prices,
                 p_range=p_range,
@@ -148,6 +158,9 @@ class ARIMAModel(BaseModel):
                 q_range=q_range
             )
             p, d, q = best_order
+            
+            # Save to cache
+            await self._save_params_cache(ticker, (p, d, q))
         else:
             # Use default (1,1,1) which often works well
             p, d, q = 1, 1, 1
@@ -327,3 +340,66 @@ class ARIMAModel(BaseModel):
             "volatility_regime": vol_regime,
             "mean_reverting": mean_reverting,
         }
+
+    async def _get_cached_params(self, ticker: str) -> Optional[Tuple[int, int, int]]:
+        """
+        Get cached ARIMA parameters for a ticker.
+        
+        Args:
+            ticker: Ticker symbol
+            
+        Returns:
+            Tuple of (p, d, q) or None if not found/expired
+        """
+        if not self._storage_service:
+            return None
+            
+        try:
+            cache_key = f"arima_params_{ticker}"
+            cached = await self._storage_service.get("model_params_cache", cache_key)
+            
+            if not cached:
+                return None
+                
+            # Check expiration (24h)
+            created_at_str = cached.get("created_at")
+            if created_at_str:
+                created_at = datetime.datetime.fromisoformat(created_at_str)
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=datetime.timezone.utc)
+                    
+                age = datetime.datetime.now(datetime.timezone.utc) - created_at
+                if age > datetime.timedelta(hours=24):
+                    return None
+                    
+            params = cached.get("params")
+            if params and len(params) == 3:
+                return tuple(params)
+                
+            return None
+        except Exception:
+            return None
+
+    async def _save_params_cache(self, ticker: str, params: Tuple[int, int, int]) -> None:
+        """
+        Save ARIMA parameters to cache.
+        
+        Args:
+            ticker: Ticker symbol
+            params: Tuple of (p, d, q)
+        """
+        if not self._storage_service:
+            return
+            
+        try:
+            cache_key = f"arima_params_{ticker}"
+            data = {
+                "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "params": list(params),
+                "ticker": ticker,
+                "model": "ARIMA"
+            }
+            await self._storage_service.save("model_params_cache", cache_key, data)
+        except Exception:
+            pass
+
