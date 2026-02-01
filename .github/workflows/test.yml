@@ -24,29 +24,12 @@ jobs:
         echo "--- Firestore Logs ---"
         docker compose logs firestore-emulator
 
-    # 2. Set up Backend
+    # 2. Set up Environment (Python, Node, uv)
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: "3.12"
 
-    - name: Install uv
-      run: curl -LsSf https://astral.sh/uv/install.sh | sh
-
-    - name: Install Backend Dependencies
-      working-directory: ./backend
-      run: |
-        uv sync --extra dev
-
-    - name: Run Backend Tests
-      working-directory: ./backend
-      env:
-        FIRESTORE_EMULATOR_HOST: localhost:8080
-        GCP_PROJECT_ID: finance-advisor
-      run: |
-        uv run pytest -v
-
-    # 3. Set up Frontend & Run Tests
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
@@ -54,19 +37,26 @@ jobs:
         cache: 'npm'
         cache-dependency-path: frontend/package-lock.json
 
-    - name: Install Frontend Dependencies
-      working-directory: ./frontend
-      run: npm ci
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-    - name: Install Playwright Browsers
-      working-directory: ./frontend
-      run: npx playwright install --with-deps
+    # 3. Install Dependencies
+    - name: Install Dependencies
+      run: bash scripts/install_deps.sh
 
-    - name: Run Playwright Tests
-      working-directory: ./frontend
-      run: npm test
+    # 4. Run Tests
+    - name: Run Backend Tests
+      env:
+        FIRESTORE_EMULATOR_HOST: localhost:8080
+        GCP_PROJECT_ID: finance-advisor
+      run: bash scripts/test_backend.sh
+
+    - name: Run Frontend Tests
       env:
         CI: true
+      run: bash scripts/test_frontend.sh
 
     - name: Show Logs on Failure
       if: failure()

@@ -10,7 +10,7 @@ This service is responsible for:
 
 import pandas as pd
 from typing import Dict, Any, Optional, List, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.services.storage_service import StorageService
 from app.services.logger_service import LoggerService
 from app.services.currency.currency_provider import CurrencyProvider
@@ -55,7 +55,9 @@ class CurrencyService:
         if cached:
             # Check if still valid
             updated = datetime.fromisoformat(cached["updated_at"])
-            if datetime.now() - updated < timedelta(hours=self.cache_ttl_hours):
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) - updated < timedelta(hours=self.cache_ttl_hours):
                 self.logger.debug(f"Using cached FX rate {from_currency}/{to_currency}: {cached['rate']}")
                 return cached["rate"]
 
@@ -67,7 +69,7 @@ class CurrencyService:
             await self.storage.save(
                 self.collection,
                 cache_key,
-                {"rate": rate, "updated_at": datetime.now().isoformat()}
+                {"rate": rate, "updated_at": datetime.now(timezone.utc).isoformat()}
             )
 
             self.logger.info(f"Fetched FX rate {from_currency}/{to_currency}: {rate}")
@@ -88,7 +90,7 @@ class CurrencyService:
         """
         if from_currency == to_currency:
             # Return DataFrame with rate = 1.0 for all dates
-            end = end_date or datetime.now().strftime("%Y-%m-%d")
+            end = end_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
             dates = pd.date_range(start=start_date, end=end, freq="D")
             return pd.DataFrame({"date": dates, "rate": 1.0})
 
@@ -98,7 +100,9 @@ class CurrencyService:
         if cached:
             # Check if still valid
             updated = datetime.fromisoformat(cached["updated_at"])
-            if datetime.now() - updated < timedelta(hours=self.cache_ttl_hours):
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) - updated < timedelta(hours=self.cache_ttl_hours):
                 self.logger.debug(f"Using cached historical FX rates for {from_currency}/{to_currency}")
                 return pd.DataFrame(cached["data"])
 
@@ -125,7 +129,7 @@ class CurrencyService:
             await self.storage.save(
                 self.collection,
                 cache_key,
-                {"data": result_data, "updated_at": datetime.now().isoformat()}
+                {"data": result_data, "updated_at": datetime.now(timezone.utc).isoformat()}
             )
 
             self.logger.info(f"Fetched historical FX rates for {from_currency}/{to_currency}: {len(df)} data points")

@@ -3,6 +3,8 @@ import { createPlan } from '../test-utils';
 
 /**
  * PLAYGROUND FEATURE TESTS - STRATEGY TEMPLATES
+ * 
+ * Tests the strategy template selector in the Historical Audit feature.
  */
 
 test.describe('Strategy Templates', () => {
@@ -21,7 +23,7 @@ test.describe('Strategy Templates', () => {
 
     test('should display strategy template selector', async ({ page }) => {
         // Should show strategy template dropdown label
-        await expect(page.getByText(/Optional/i)).toBeVisible();
+        await expect(page.getByText(/Strategy Template.*Optional/i)).toBeVisible();
         // Look for the select element
         await expect(page.locator('select')).toBeVisible();
     });
@@ -53,7 +55,7 @@ test.describe('Strategy Templates', () => {
         // Select by index or by exact text matching
         await selectElement.selectOption({ index: options.indexOf(conservativeOption!) });
 
-        // Should show info alert with "Selected:" and strategy name
+        // Should show info with "Selected:" and strategy name
         await expect(page.getByText(/Selected: Conservative Income/i)).toBeVisible({ timeout: 3000 });
     });
 
@@ -72,19 +74,17 @@ test.describe('Strategy Templates', () => {
         await expect(page.getByText(/Selected: Aggressive Growth/i)).toBeVisible();
     });
 
-    test('should show risk level badge for selected strategy', async ({ page }) => {
+    test('should show risk level for selected strategy', async ({ page }) => {
         const selectElement = page.locator('select');
         const options = await selectElement.locator('option').allTextContents();
         const conservativeIndex = options.findIndex(o => o.includes('Conservative Income'));
 
         await selectElement.selectOption({ index: conservativeIndex });
 
-        // Should show risk level badge in the strategy info alert
-        // Use .first() because there are multiple .alert-info elements on the page
-        const strategyAlert = page.locator('.alert-info').filter({ hasText: /Selected:/i });
-        await expect(strategyAlert.locator('.badge')).toBeVisible();
-        const alertText = await strategyAlert.textContent();
-        expect(alertText?.toLowerCase()).toMatch(/conservative/i);
+        // Should show risk level information
+        await expect(page.getByText(/Risk Level/i)).toBeVisible();
+        // Should show the badge with risk level
+        await expect(page.locator('.badge').filter({ hasText: /conservative/i })).toBeVisible();
     });
 
     test('should allow clearing strategy selection', async ({ page }) => {
@@ -105,10 +105,10 @@ test.describe('Strategy Templates', () => {
 
     // NOTE: Full E2E test with actual backtest using strategy is skipped
     // because it requires waiting 60+ seconds for optimization
-    test.skip('should use strategy template for backtest', async ({ page }) => {
+    test.skip('should use strategy template for fear test', async ({ page }) => {
         // This would require:
         // 1. Select a strategy
-        // 2. Run backtest
+        // 2. Run fear test
         // 3. Wait 60+ seconds
         // 4. Verify results respect strategy constraints
         // Skipping due to long execution time

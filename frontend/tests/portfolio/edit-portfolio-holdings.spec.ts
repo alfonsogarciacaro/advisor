@@ -41,6 +41,7 @@ test.describe('Edit Portfolio Holdings', () => {
 
         // Save
         await page.getByRole('button', { name: /Save Portfolio/i }).click();
+        await expect(page.getByRole('dialog')).not.toBeVisible();
 
         // Verify the update persisted
         await page.getByRole('button', { name: /Edit Portfolio/i }).click();
@@ -110,10 +111,11 @@ test.describe('Edit Portfolio Holdings', () => {
 
         // Save
         await page.getByRole('button', { name: /Save Portfolio/i }).click();
+        await expect(page.getByRole('dialog')).not.toBeVisible();
 
-        // Verify all accounts are shown
+        // Verify all accounts are shown (UI shows full account names)
         await expect(page.getByRole('heading', { name: /NISA Growth/i })).toBeVisible();
-        await expect(page.getByRole('heading', { name: /Taxable/i })).toBeVisible();
+        await expect(page.getByRole('heading', { name: /Taxable Account/i })).toBeVisible();
         await expect(page.getByRole('heading', { name: /iDeCo/i })).toBeVisible();
     });
 
@@ -153,6 +155,7 @@ test.describe('Edit Portfolio Holdings', () => {
 
         // Save
         await page.getByRole('button', { name: /Save Portfolio/i }).click();
+        await expect(page.getByRole('dialog')).not.toBeVisible();
 
         // Reopen and verify both changes persisted
         await page.getByRole('button', { name: /Edit Portfolio/i }).click();
@@ -199,9 +202,10 @@ test.describe('Edit Portfolio Holdings', () => {
 
         // Save
         await page.getByRole('button', { name: /Save Portfolio/i }).click();
+        await expect(page.getByRole('dialog')).not.toBeVisible();
 
         // Should now show in Taxable account
-        await expect(page.getByRole('heading', { name: /Taxable/i })).toBeVisible();
+        await expect(page.getByRole('heading', { name: /Taxable Account/i })).toBeVisible();
 
         // NISA Growth should not be visible (unless there are other holdings)
         const nisaText = page.getByRole('heading', { name: /NISA Growth/i });

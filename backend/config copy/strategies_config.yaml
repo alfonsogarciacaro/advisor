@@ -1,0 +1,133 @@
+# Strategy Templates Configuration
+# Predefined portfolio optimization strategies
+
+strategies:
+  - strategy_id: "conservative_income"
+    name: "Conservative Income"
+    description: "Low volatility portfolio focused on steady income through dividends and bonds"
+    risk_level: "conservative"
+    icon: "shield"
+    tags: ["income", "low-risk", "bonds"]
+    constraints:
+      max_volatility: 0.10
+      min_dividend_yield: 0.02
+      max_equity_allocation: 0.40
+      min_fixed_income: 0.60
+      max_asset_weight: 0.25
+
+  - strategy_id: "balanced_diversifier"
+    name: "Balanced Diversifier"
+    description: "Balanced mix of equities and bonds for moderate growth with stability"
+    risk_level: "moderate"
+    icon: "balance"
+    tags: ["balanced", "diversified", "moderate-risk"]
+    constraints:
+      max_volatility: 0.15
+      target_equity_allocation: 0.60
+      target_fixed_income: 0.40
+      max_asset_weight: 0.30
+      min_holdings: 10
+
+  - strategy_id: "aggressive_growth"
+    name: "Aggressive Growth"
+    description: "Maximum growth potential with high volatility through concentrated equity positions"
+    risk_level: "aggressive"
+    icon: "trending-up"
+    tags: ["growth", "high-risk", "equities"]
+    constraints:
+      max_volatility: 0.25
+      min_equity_allocation: 0.90
+      max_asset_weight: 0.35
+      sector_constraints:
+        technology: {"max": 0.40}
+      min_holdings: 5
+      max_holdings: 15
+
+  - strategy_id: "tech_heavy"
+    name: "Tech Heavy"
+    description: "Focused on technology sector for high growth potential"
+    risk_level: "aggressive"
+    icon: "microchip"
+    tags: ["technology", "growth", "sector-specific"]
+    constraints:
+      min_technology_allocation: 0.50
+      max_volatility: 0.22
+      max_asset_weight: 0.30
+      sector_constraints:
+        technology: {"min": 0.50, "max": 0.80}
+
+  - strategy_id: "healthcare_focus"
+    name: "Healthcare Focus"
+    description: "Concentrated on healthcare sector for defensive growth"
+    risk_level: "moderate"
+    icon: "heart-pulse"
+    tags: ["healthcare", "defensive", "sector-specific"]
+    constraints:
+      min_healthcare_allocation: 0.40
+      max_volatility: 0.18
+      max_asset_weight: 0.30
+      sector_constraints:
+        healthcare: {"min": 0.40, "max": 0.70}
+
+  - strategy_id: "dividend_aristocrats"
+    name: "Dividend Aristocrats"
+    description: "Focus on high-quality dividend-paying companies with consistent history"
+    risk_level: "moderate"
+    icon: "coins"
+    tags: ["dividends", "income", "quality"]
+    constraints:
+      min_dividend_yield: 0.03
+      max_volatility: 0.16
+      min_holdings: 15
+      max_asset_weight: 0.20
+
+  - strategy_id: "recession_proof"
+    name: "Recession Proof"
+    description: "Defensive portfolio designed to weather economic downturns"
+    risk_level: "conservative"
+    icon: "umbrella"
+    tags: ["defensive", "low-risk", "utilities"]
+    constraints:
+      max_volatility: 0.12
+      max_equity_allocation: 0.50
+      min_fixed_income: 0.40
+      sector_constraints:
+        utilities: {"min": 0.15, "max": 0.35}
+        consumer_staples: {"min": 0.10, "max": 0.30}
+      max_asset_weight: 0.25
+
+  - strategy_id: "inflation_hedge"
+    name: "Inflation Hedge"
+    description: "Portfolio designed to protect against inflation through TIPS and commodities"
+    risk_level: "moderate"
+    icon: "chart-bar"
+    tags: ["inflation", "protection", "real-assets"]
+    constraints:
+      max_volatility: 0.14
+      min_tips_allocation: 0.20
+      min_commodities_allocation: 0.10
+      max_asset_weight: 0.30
+
+# Tax Settings by Account Type
+tax_settings:
+  short_term_capital_gains_rate: 0.35  # Japan default
+  long_term_capital_gains_rate: 0.15  # Japan default
+  account_types:
+    taxable:
+      short_term_capital_gains_rate: 0.35
+      long_term_capital_gains_rate: 0.15
+      description: "Standard taxable brokerage account"
+    nisa_growth:
+      short_term_capital_gains_rate: 0.0
+      long_term_capital_gains_rate: 0.0
+      description: "NISA Growth Account - tax exempt"
+      max_investment: 1200000  # JPY/year
+    nisa_general:
+      short_term_capital_gains_rate: 0.0
+      long_term_capital_gains_rate: 0.0
+      description: "NISA General Account - tax exempt"
+      max_investment: 3600000  # JPY/year (old accumulation NISA)
+    isa:
+      short_term_capital_gains_rate: 0.0
+      long_term_capital_gains_rate: 0.0
+      description: "ISA/ISA-like tax-advantaged account"

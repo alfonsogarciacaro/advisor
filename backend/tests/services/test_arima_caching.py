@@ -27,8 +27,11 @@ def mock_storage_service():
     return mock
 
 @pytest.mark.asyncio
-async def test_arima_caching_hit(mock_price_history, mock_storage_service):
+async def test_arima_caching_hit(mock_price_history, mock_storage_service, monkeypatch):
     """Test that ARIMA uses cached parameters when available."""
+    # Disable FAST_OPTIMIZE to test actual caching behavior
+    monkeypatch.setenv("FAST_OPTIMIZE", "false")
+    
     model = ARIMAModel()
     model.set_storage_service(mock_storage_service)
     
@@ -54,8 +57,11 @@ async def test_arima_caching_hit(mock_price_history, mock_storage_service):
         mock_storage_service.get.assert_called_with("model_params_cache", "arima_params_AAPL")
 
 @pytest.mark.asyncio
-async def test_arima_caching_miss(mock_price_history, mock_storage_service):
+async def test_arima_caching_miss(mock_price_history, mock_storage_service, monkeypatch):
     """Test that ARIMA saves parameters to cache after auto-tuning."""
+    # Disable FAST_OPTIMIZE to test actual caching behavior
+    monkeypatch.setenv("FAST_OPTIMIZE", "false")
+    
     model = ARIMAModel()
     model.set_storage_service(mock_storage_service)
     

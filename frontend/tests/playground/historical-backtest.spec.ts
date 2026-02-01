@@ -3,6 +3,11 @@ import { createPlan } from '../test-utils';
 
 /**
  * PLAYGROUND FEATURE TESTS - HISTORICAL BACKTESTING
+ * 
+ * UI Labels:
+ * - Heading: "Historical Audit" (not "Historical Replay")
+ * - Button: "Run Fear Test" (not "Run Backtest")
+ * - Selected items use btn-error class (not btn-primary)
  */
 
 test.describe('Historical Backtest', () => {
@@ -18,15 +23,15 @@ test.describe('Historical Backtest', () => {
         await page.waitForTimeout(500);
     });
 
-    test('should display historical replay interface', async ({ page }) => {
-        // Should show the Historical Replay heading
-        await expect(page.getByRole('heading', { name: /Historical Replay/i })).toBeVisible();
+    test('should display historical audit interface', async ({ page }) => {
+        // Should show the Historical Audit heading
+        await expect(page.getByRole('heading', { name: /Historical Audit/i })).toBeVisible();
 
-        // Should show description
-        await expect(page.getByText(/how this strategy would have performed/i)).toBeVisible();
+        // Should show description about fear testing
+        await expect(page.getByText(/Would you have sold/i)).toBeVisible();
 
-        // Should show Run Backtest button
-        await expect(page.getByRole('button', { name: /Run Backtest/i })).toBeVisible();
+        // Should show Run Fear Test button
+        await expect(page.getByRole('button', { name: /Run Fear Test/i })).toBeVisible();
     });
 
     test('should show preset historical periods', async ({ page }) => {
@@ -73,15 +78,15 @@ test.describe('Historical Backtest', () => {
         await expect(amountInput).toHaveValue('25000');
     });
 
-    test('should run backtest and show loading state', async ({ page }) => {
+    test('should run fear test and show loading state', async ({ page }) => {
         // Set a historical date
         await page.getByRole('button', { name: /Pre-COVID/i }).click();
 
-        // Run backtest
-        await page.getByRole('button', { name: /Run Backtest/i }).click();
+        // Run fear test
+        await page.getByRole('button', { name: /Run Fear Test/i }).click();
 
         // Should show loading state
-        await expect(page.getByText(/Running Backtest/i)).toBeVisible({ timeout: 5000 });
+        await expect(page.getByText(/Running Fear Test/i)).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.loading')).toBeVisible();
     });
 

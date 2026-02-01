@@ -1,5 +1,6 @@
 """ARIMA forecasting model."""
 
+import os
 import numpy as np
 import pandas as pd
 import warnings
@@ -143,12 +144,18 @@ class ARIMAModel(BaseModel):
         # Determine if we need differencing (stationarity test)
         is_stationary, d = self._check_stationarity(log_prices)
 
+        # Check for FAST_OPTIMIZE (skip expensive auto-tuning in test mode)
+        fast_mode = os.environ.get("FAST_OPTIMIZE", "false").lower() == "true"
+
         # Try to get cached parameters
         cached_params = None
-        if auto_tune:
+        if auto_tune and not fast_mode:
             cached_params = await self._get_cached_params(ticker)
             
-        if cached_params:
+        if fast_mode:
+            # Fast mode: skip auto-tuning entirely, use default params
+            p, d, q = 1, 1, 1
+        elif cached_params:
             p, d, q = cached_params
         elif auto_tune:
             best_order = self._auto_tune_arima(

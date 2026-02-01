@@ -3,6 +3,10 @@ import { createPlan } from '../test-utils';
 
 /**
  * PLAYGROUND FEATURE TESTS - TAX-AWARE BACKTESTING
+ * 
+ * UI Labels:
+ * - Button class when selected: btn-error (not btn-primary)
+ * - Run button: "Run Fear Test" (not "Run Backtest")
  */
 
 test.describe('Tax-Aware Backtesting', () => {
@@ -40,12 +44,12 @@ test.describe('Tax-Aware Backtesting', () => {
     });
 
     test('should allow selecting different account types', async ({ page }) => {
-        // Click different account types
+        // Click different account types - selected items use btn-error class
         await page.getByRole('button', { name: /NISA Growth/i }).click();
-        await expect(page.getByRole('button', { name: /NISA Growth/i })).toHaveClass(/btn-primary/);
+        await expect(page.getByRole('button', { name: /NISA Growth/i })).toHaveClass(/btn-error/);
 
         await page.getByRole('button', { name: /Taxable/i }).click();
-        await expect(page.getByRole('button', { name: /Taxable/i })).toHaveClass(/btn-primary/);
+        await expect(page.getByRole('button', { name: /Taxable/i })).toHaveClass(/btn-error/);
     });
 
     test('should show 0% tax info for NISA accounts', async ({ page }) => {
@@ -58,17 +62,18 @@ test.describe('Tax-Aware Backtesting', () => {
     });
 
     test('should show different styling for selected account type', async ({ page }) => {
-        // Taxable should be selected by default
-        await expect(page.getByRole('button', { name: /Taxable/i })).toHaveClass(/btn-primary/);
-
         // Click NISA Growth
         await page.getByRole('button', { name: /NISA Growth/i }).click();
 
-        // Taxable should no longer be selected
-        await expect(page.getByRole('button', { name: /Taxable/i })).not.toHaveClass(/btn-primary/);
+        // NISA Growth should be selected (btn-error)
+        await expect(page.getByRole('button', { name: /NISA Growth/i })).toHaveClass(/btn-error/);
 
-        // NISA Growth should be selected
-        await expect(page.getByRole('button', { name: /NISA Growth/i })).toHaveClass(/btn-primary/);
+        // Click Taxable
+        await page.getByRole('button', { name: /Taxable/i }).click();
+
+        // Now Taxable should be selected and NISA Growth should not
+        await expect(page.getByRole('button', { name: /Taxable/i })).toHaveClass(/btn-error/);
+        await expect(page.getByRole('button', { name: /NISA Growth/i })).not.toHaveClass(/btn-error/);
     });
 
     test('should show tax hint for NISA accounts', async ({ page }) => {
@@ -76,18 +81,18 @@ test.describe('Tax-Aware Backtesting', () => {
         await expect(page.getByText(/NISA accounts have 0% capital gains tax/i)).toBeVisible();
     });
 
-    test('should run backtest with selected account type', async ({ page }) => {
+    test('should run fear test with selected account type', async ({ page }) => {
         // Select NISA Growth
         await page.getByRole('button', { name: /NISA Growth/i }).click();
 
         // Set a historical date
         await page.getByRole('button', { name: /Pre-COVID/i }).click();
 
-        // Run backtest
-        await page.getByRole('button', { name: /Run Backtest/i }).click();
+        // Run fear test
+        await page.getByRole('button', { name: /Run Fear Test/i }).click();
 
         // Should show loading state
-        await expect(page.getByText(/Running Backtest/i)).toBeVisible({ timeout: 5000 });
+        await expect(page.getByText(/Running Fear Test/i)).toBeVisible({ timeout: 5000 });
     });
 
     // NOTE: Full end-to-end tax result testing is skipped because:
@@ -120,22 +125,17 @@ test.describe('Tax-Aware Backtesting', () => {
         await expect(page.getByRole('button', { name: /iDeCo/i })).toBeVisible();
     });
 
-    test('should maintain account type selection during session', async ({ page }) => {
+    test('should switch account type selection', async ({ page }) => {
         // Select NISA Growth
         await page.getByRole('button', { name: /NISA Growth/i }).click();
-        await expect(page.getByRole('button', { name: /NISA Growth/i })).toHaveClass(/btn-primary/);
+        await expect(page.getByRole('button', { name: /NISA Growth/i })).toHaveClass(/btn-error/);
 
         // Navigate away and back
         await page.getByRole('tab', { name: 'Overview' }).click();
         await page.waitForTimeout(300);
         await page.getByRole('tab', { name: 'Playground' }).click();
 
-        // Selection should persist (or may reset - this test documents current behavior)
-        const isSelected = await page.getByRole('button', { name: /NISA Growth/i }).evaluate(el =>
-            el.classList.contains('btn-primary')
-        );
-
         // Note: This test documents whether state persists across tab navigation
-        // If it doesn't, that's acceptable behavior
+        // Selection may or may not persist depending on implementation
     });
 });

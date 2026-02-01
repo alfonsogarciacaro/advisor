@@ -1,0 +1,199 @@
+# ETF Configuration for Financial Advisor
+# Organized by asset class and market
+
+etfs:
+  # US Equity Indices
+  - symbol: "SPY"
+    name: "SPDR S&P 500 ETF Trust"
+    description: "Tracks the S&P 500 index - large cap US stocks"
+    asset_class: "equity_indices"
+    market: "US"
+    benchmark: "S&P 500"
+    expense_ratio: 0.0009
+
+  - symbol: "QQQ"
+    name: "Invesco QQQ Trust"
+    description: "Tracks Nasdaq-100 - tech-heavy index"
+    asset_class: "equity_indices"
+    market: "US"
+    benchmark: "Nasdaq-100"
+    expense_ratio: 0.0020
+
+  - symbol: "IWM"
+    name: "iShares Russell 2000 ETF"
+    description: "Tracks Russell 2000 - small cap US stocks"
+    asset_class: "equity_indices"
+    market: "US"
+    benchmark: "Russell 2000"
+    expense_ratio: 0.0019
+
+  # Japan Equity Indices
+  - symbol: "1306.T"
+    name: "NEXT FUNDS Nikkei 225 ETF"
+    description: "Tracks Nikkei 225 index - Japan's primary stock index"
+    asset_class: "equity_indices"
+    market: "JP"
+    benchmark: "Nikkei 225"
+    expense_ratio: 0.0010
+
+  - symbol: "1321.T"
+    name: "NEXT FUNDS TOPIX ETF"
+    description: "Tracks TOPIX index - all Tokyo Stock Exchange First Section stocks"
+    asset_class: "equity_indices"
+    market: "JP"
+    benchmark: "TOPIX"
+    expense_ratio: 0.0012
+
+  # US Fixed Income
+  - symbol: "AGG"
+    name: "iShares Core U.S. Aggregate Bond ETF"
+    description: "Tracks broad US investment grade bond market"
+    asset_class: "fixed_income"
+    market: "US"
+    sub_type: "government"
+    expense_ratio: 0.0003
+
+  # Japan Fixed Income
+  - symbol: "2561.T"
+    name: "iShares Core Japan Government Bond ETF"
+    description: "Tracks FTSE Japanese Government Bond Index - exposure to JGBs"
+    asset_class: "fixed_income"
+    market: "JP"
+    sub_type: "government"
+    expense_ratio: 0.0005
+
+  # US Sector ETFs
+  - symbol: "XLK"
+    name: "Technology Select Sector SPDR ETF"
+    description: "Tracks S&P 500 technology sector - software, hardware, IT services"
+    asset_class: "equity_indices"
+    market: "US"
+    sub_type: "technology"
+    expense_ratio: 0.0010
+
+  - symbol: "XLV"
+    name: "Health Care Select Sector SPDR ETF"
+    description: "Tracks S&P 500 healthcare sector - pharma, biotech, medical devices"
+    asset_class: "equity_indices"
+    market: "US"
+    sub_type: "healthcare"
+    expense_ratio: 0.0010
+
+  - symbol: "XLF"
+    name: "Financial Select Sector SPDR ETF"
+    description: "Tracks S&P 500 financial sector - banks, insurance, investment services"
+    asset_class: "equity_indices"
+    market: "US"
+    sub_type: "financials"
+    expense_ratio: 0.0010
+
+  - symbol: "XLY"
+    name: "Consumer Discretionary Select Sector SPDR ETF"
+    description: "Tracks S&P 500 consumer discretionary - retail, autos, leisure, media"
+    asset_class: "equity_indices"
+    market: "US"
+    sub_type: "consumer_discretionary"
+    expense_ratio: 0.0010
+
+  - symbol: "XLP"
+    name: "Consumer Staples Select Sector SPDR ETF"
+    description: "Tracks S&P 500 consumer staples - food, beverages, household products"
+    asset_class: "equity_indices"
+    market: "US"
+    sub_type: "consumer_staples"
+    expense_ratio: 0.0010
+
+  # Japan Sector ETFs
+  - symbol: "1626.T"
+    name: "NEXT FUNDS TOPIX-17 IT & Services ETF"
+    description: "Tracks TOPIX-17 IT & Services, Others index - Japanese technology sector"
+    asset_class: "equity_indices"
+    market: "JP"
+    sub_type: "technology"
+    expense_ratio: 0.0010
+
+  - symbol: "1631.T"
+    name: "NEXT FUNDS TOPIX-17 Banks ETF"
+    description: "Tracks TOPIX-17 Banks index - Japanese banking sector"
+    asset_class: "equity_indices"
+    market: "JP"
+    sub_type: "financials"
+    expense_ratio: 0.0010
+
+  - symbol: "1628.T"
+    name: "NEXT FUNDS TOPIX-17 Pharmaceuticals ETF"
+    description: "Tracks TOPIX-17 Pharmaceutical index - Japanese healthcare/pharma sector"
+    asset_class: "equity_indices"
+    market: "JP"
+    sub_type: "healthcare"
+    expense_ratio: 0.0010
+
+  - symbol: "1629.T"
+    name: "NEXT FUNDS TOPIX-17 Commercial & Wholesale Trade ETF"
+    description: "Tracks TOPIX-17 Commercial & Wholesale Trade index - Japanese consumer/retail sector"
+    asset_class: "equity_indices"
+    market: "JP"
+    sub_type: "consumer"
+    expense_ratio: 0.0010
+
+  # US REITs
+  - symbol: "VNQ"
+    name: "Vanguard Real Estate ETF"
+    description: "Tracks US REITs - real estate investment trusts"
+    asset_class: "reits"
+    market: "US"
+    expense_ratio: 0.0010
+
+  # Japan REITs
+  - symbol: "1343.T"
+    name: "NEXT FUNDS REIT Index ETF"
+    description: "Tracks Tokyo Stock Exchange REIT Index - Japanese real estate"
+    asset_class: "reits"
+    market: "JP"
+    expense_ratio: 0.0012
+
+  # Commodities
+  - symbol: "GLD"
+    name: "SPDR Gold Shares"
+    description: "Tracks gold bullion price"
+    asset_class: "commodities"
+    market: "US"
+    commodity: "gold"
+    expense_ratio: 0.0040
+
+  - symbol: "USO"
+    name: "United States Oil Fund"
+    description: "Tracks West Texas Intermediate crude oil"
+    asset_class: "commodities"
+    market: "US"
+    commodity: "oil"
+    expense_ratio: 0.0060
+
+# Data fetching settings
+data_settings:
+  default_period: "5y"      # 5 years historical data
+  default_interval: "1d"    # Daily data
+  cache_ttl_hours: 24       # OHLCV cache TTL
+  fundamentals_ttl_hours: 168  # Fundamentals cache TTL (1 week)
+  forecast_cache_ttl_hours: 24  # Forecast cache TTL (configurable, 24h default)
+
+# Fundamental data fields to fetch
+fundamental_fields:
+  - "marketCap"         # Market capitalization
+  - "trailingPE"        # P/E ratio (TTM)
+  - "forwardPE"         # Forward P/E
+  - "pegRatio"          # PEG ratio
+  - "priceToBook"       # P/B ratio
+  - "dividendYield"     # Annual dividend yield
+  - "beta"              # Beta coefficient
+  - "52WeekChange"      # 52-week price change
+  - "enterpriseValue"   # Enterprise value
+  - "profitMargins"     # Profit margin
+
+# Commission settings for portfolio optimization
+commission_settings:
+  type: "flat_per_trade" # Options: "flat_per_trade", "percentage", "tier_based"
+  value: 1.0            # $1.00 per trade (example)
+  min_commission: 0.0    # Minimum commission
+  currency: "USD"        # Commission currency
+

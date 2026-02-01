@@ -58,7 +58,20 @@ export const FinancialNews: React.FC = () => {
                                 <span className="font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">
                                     {item.source}
                                 </span>
-                                <span>{new Date(parseInt(item.time_published.substring(0, 8) + 'T' + item.time_published.substring(9, 15))).toLocaleDateString()}</span>
+                                <span>{(() => {
+                                    try {
+                                        let s = item.time_published;
+                                        // Handle specific API format: YYYYMMDDTHHMMSS (e.g., 20240315T103000)
+                                        if (/^\d{8}T\d{6}$/.test(s)) {
+                                            s = `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T${s.slice(9, 11)}:${s.slice(11, 13)}:${s.slice(13, 15)}`;
+                                        }
+
+                                        const date = new Date(s);
+                                        return !isNaN(date.getTime()) ? date.toLocaleDateString() : 'Recent';
+                                    } catch (e) {
+                                        return 'Recent';
+                                    }
+                                })()}</span>
                             </div>
                             <h3 className="text-lg font-semibold leading-6 text-zinc-900 group-hover:text-blue-600 dark:text-zinc-100 dark:group-hover:text-blue-400">
                                 {item.title}

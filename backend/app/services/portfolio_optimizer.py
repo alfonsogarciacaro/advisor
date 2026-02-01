@@ -144,6 +144,8 @@ class PortfolioOptimizerService:
                 # Backtesting mode: Fetch data from historical_date to NOW
                 try:
                     hist_date = datetime.datetime.fromisoformat(historical_date)
+                    if hist_date.tzinfo is None:
+                        hist_date = hist_date.replace(tzinfo=datetime.timezone.utc)
                 except ValueError:
                     raise ValueError(f"Invalid historical_date format: {historical_date}. Use YYYY-MM-DD.")
 
@@ -349,12 +351,17 @@ class PortfolioOptimizerService:
             if historical_date and test_data is not None:
                 self.logger.info(f"Calculating backtest performance from {historical_date}")
                 try:
+                    # Ensure historical_date is a datetime object and timezone-aware
+                    h_date = datetime.datetime.fromisoformat(historical_date)
+                    if h_date.tzinfo is None:
+                        h_date = h_date.replace(tzinfo=datetime.timezone.utc)
+                    
                     backtest_result = self._calculate_backtest_performance(
                         optimal_weights=active_assets,
                         test_data=test_data,
                         training_data=prices_for_optimization,
                         initial_amount=amount,
-                        historical_date=datetime.datetime.fromisoformat(historical_date),
+                        historical_date=h_date,
                         account_type=account_type or 'taxable'
                     )
                     self.logger.info(f"Backtest complete: {backtest_result.metrics['total_return']:.2%} return")

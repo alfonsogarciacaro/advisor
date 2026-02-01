@@ -1,20 +1,21 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { optimizePortfolio, getOptimizationStatus, BacktestResult, OptimizationResult } from '../lib/api-client';
+import { optimizePortfolio, getOptimizationStatus, BacktestResult } from '../lib/api-client';
 import { listStrategies, StrategyTemplate } from '../lib/api-client';
 import { PRESET_PERIODS, ACCOUNT_TYPES } from '../lib/historical-events';
 import BacktestResults from './BacktestResults';
+import { HISTORICAL_AUDIT_THEME } from '../lib/theme-constants';
 
-interface HistoricalReplayProps {
+interface HistoricalAuditProps {
     initialAmount?: number;
     currency?: string;
 }
 
-export default function HistoricalReplay({
+export default function HistoricalAudit({
     initialAmount = 10000,
     currency = 'USD'
-}: HistoricalReplayProps) {
+}: HistoricalAuditProps) {
     const [startDate, setStartDate] = useState('2020-01-01');
     const [amount, setAmount] = useState(initialAmount);
     const [loading, setLoading] = useState(false);
@@ -52,8 +53,7 @@ export default function HistoricalReplay({
             const response = await optimizePortfolio(
                 amount,
                 currency,
-                false, // fast mode
-                startDate,
+                startDate, // historical_date for Historical Audit
                 selectedStrategy || undefined,
                 accountType
             );
@@ -121,20 +121,32 @@ export default function HistoricalReplay({
 
     return (
         <div className="space-y-6">
-            <div className="card bg-base-200 p-6">
-                <h3 className="text-xl font-bold mb-4">🕰️ Historical Replay</h3>
-                <p className="text-sm text-base-content/70 mb-6">
-                    See how this strategy would have performed starting from a specific date in the past.
-                </p>
+            <div className={`card bg-base-200 p-6 border-l-4 ${HISTORICAL_AUDIT_THEME.colors.border}`}>
+                <div className="flex items-start gap-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={`w-8 h-8 ${HISTORICAL_AUDIT_THEME.colors.text} shrink-0`}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    </svg>
+                    <div className="flex-1">
+                        <h3 className={`text-xl font-bold mb-1 ${HISTORICAL_AUDIT_THEME.colors.text}`}>
+                            {HISTORICAL_AUDIT_THEME.heading}
+                        </h3>
+                        <p className={`text-sm font-semibold ${HISTORICAL_AUDIT_THEME.colors.text}`}>
+                            {HISTORICAL_AUDIT_THEME.subheading}
+                        </p>
+                        <p className="text-sm text-base-content/70 mt-2">
+                            {HISTORICAL_AUDIT_THEME.description}
+                        </p>
+                    </div>
+                </div>
 
                 {/* Preset Periods */}
-                <div className="mb-4">
+                <div className="mt-6">
                     <label className="label">Quick Select Historical Period</label>
                     <div className="flex flex-wrap gap-2">
                         {PRESET_PERIODS.map(preset => (
                             <button
                                 key={preset.date}
-                                className={`btn btn-sm ${startDate === preset.date ? 'btn-primary' : 'btn-outline'}`}
+                                className={`btn btn-sm ${startDate === preset.date ? 'btn-error' : 'btn-outline'}`}
                                 onClick={() => setStartDate(preset.date)}
                                 title={preset.description}
                             >
@@ -146,7 +158,7 @@ export default function HistoricalReplay({
                 </div>
 
                 {/* Custom Date Picker */}
-                <div className="form-control mb-4">
+                <div className="form-control mt-4">
                     <label htmlFor="start-date" className="label">Or Pick Custom Start Date</label>
                     <input
                         id="start-date"
@@ -159,7 +171,7 @@ export default function HistoricalReplay({
                 </div>
 
                 {/* Amount Input */}
-                <div className="form-control mb-4">
+                <div className="form-control mt-4">
                     <label htmlFor="investment-amount" className="label">Investment Amount</label>
                     <input
                         id="investment-amount"
@@ -177,13 +189,13 @@ export default function HistoricalReplay({
                 </div>
 
                 {/* Account Type Selector */}
-                <div className="form-control mb-4">
+                <div className="form-control mt-4">
                     <label className="label">Account Type (affects taxes)</label>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                         {ACCOUNT_TYPES.map(account => (
                             <button
                                 key={account.value}
-                                className={`btn btn-sm ${accountType === account.value ? 'btn-primary' : 'btn-outline'}`}
+                                className={`btn btn-sm ${accountType === account.value ? 'btn-error' : 'btn-outline'}`}
                                 onClick={() => setAccountType(account.value)}
                             >
                                 <span className="text-lg mr-1">{account.icon}</span>
@@ -199,7 +211,7 @@ export default function HistoricalReplay({
                 </div>
 
                 {/* Strategy Selector */}
-                <div className="form-control mb-6">
+                <div className="form-control mt-4">
                     <label className="label">Strategy Template (Optional)</label>
                     {strategiesLoading ? (
                         <div className="flex items-center gap-2">
@@ -241,7 +253,7 @@ export default function HistoricalReplay({
 
                 {/* Selected Strategy Summary */}
                 {selectedStrategyData && (
-                    <div className="alert alert-info mb-6">
+                    <div className={`alert mt-4 border-l-4 ${HISTORICAL_AUDIT_THEME.colors.border}`}>
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
@@ -257,7 +269,7 @@ export default function HistoricalReplay({
 
                 {/* Tax Impact Info */}
                 {accountType !== 'taxable' && (
-                    <div className="alert alert-success mb-6">
+                    <div className="alert alert-success mt-4">
                         <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
@@ -273,20 +285,22 @@ export default function HistoricalReplay({
 
                 {/* Run Button */}
                 <button
-                    className="btn btn-primary btn-block"
+                    className="btn btn-error btn-block mt-6"
                     onClick={runBacktest}
                     disabled={loading}
-                    aria-label="Run Backtest"
+                    aria-label="Run Fear Test"
                 >
                     {loading ? (
                         <>
                             <span className="loading loading-spinner"></span>
-                            Running Backtest...
+                            Running Fear Test...
                         </>
                     ) : (
                         <>
-                            <span className="text-lg mr-2">▶️</span>
-                            Run Backtest
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 mr-2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" />
+                            </svg>
+                            Run Fear Test
                         </>
                     )}
                 </button>
@@ -299,3 +313,6 @@ export default function HistoricalReplay({
         </div>
     );
 }
+
+// Export alias for backward compatibility
+export { HistoricalAudit as HistoricalReplay };

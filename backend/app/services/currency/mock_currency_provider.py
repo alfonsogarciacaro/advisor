@@ -1,7 +1,7 @@
 
 import pandas as pd
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from .currency_provider import CurrencyProvider
 
 class MockCurrencyProvider(CurrencyProvider):
@@ -53,7 +53,7 @@ class MockCurrencyProvider(CurrencyProvider):
         start_date: str,
         end_date: Optional[str] = None
     ) -> pd.DataFrame:
-        end = end_date or datetime.now().strftime("%Y-%m-%d")
+        end = end_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
         dates = pd.date_range(start=start_date, end=end, freq="D")
         
         # Get base rate

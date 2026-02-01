@@ -14,6 +14,10 @@ import { createPlan } from '../test-utils';
  * NOTE: This story requires running actual backtests which can take 60+ seconds.
  * Most tests are skipped due to execution time and complexity. This would be better
  * tested with mocked backend responses or dedicated E2E tests with longer timeouts.
+ * 
+ * UI Labels:
+ * - Heading: "Historical Audit" (not "Historical Replay")
+ * - Button: "Run Fear Test" (not "Run Backtest")
  */
 test.describe('View FX Impact in Backtest', () => {
     test.beforeEach(async ({ page }) => {
@@ -24,10 +28,10 @@ test.describe('View FX Impact in Backtest', () => {
         await page.getByRole('tab', { name: /Playground/i }).click();
     });
 
-    test('should display historical replay interface', async ({ page }) => {
+    test('should display historical audit interface', async ({ page }) => {
         // Verify we can access the backtest feature
-        await expect(page.getByRole('heading', { name: /Historical Replay/i })).toBeVisible();
-        await expect(page.getByRole('button', { name: /Run Backtest/i })).toBeVisible();
+        await expect(page.getByRole('heading', { name: /Historical Audit/i })).toBeVisible();
+        await expect(page.getByRole('button', { name: /Run Fear Test/i })).toBeVisible();
     });
 
     // The following tests are skipped because they require long-running backend processes

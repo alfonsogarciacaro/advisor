@@ -1,20 +1,13 @@
 
-import os
 import pytest
-from dotenv import load_dotenv
+import tests.test_utils as test_utils
 
-@pytest.fixture(scope="session", autouse=True)
-def load_test_env():
-    """
-    Automatically load .env.test before any tests run.
-    This ensures all external APIs are disabled and mocks are used.
-    """
-    env_test_path = os.path.join(os.path.dirname(__file__), "..", ".env.test")
-    if os.path.exists(env_test_path):
-        print(f"Loading test environment from {env_test_path}")
-        load_dotenv(env_test_path, override=True)
-    else:
-        print("WARNING: .env.test not found. Mocking might depend on existing env vars.")
+def pytest_sessionstart(session):
+    test_utils.load_test_env()
+    if not test_utils.verify_storage_emulator():
+        pytest.exit("Firestore emulator is not running", returncode=1)
+    
+    test_utils.clear_test_data_collections()
 
 @pytest.fixture(autouse=True)
 def clear_dependency_cache():

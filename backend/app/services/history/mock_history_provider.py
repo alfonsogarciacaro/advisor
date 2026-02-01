@@ -27,7 +27,8 @@ class MockHistoryProvider(HistoryDataProvider):
         else:
             days = 100
             
-        dates = pd.date_range(end=pd.Timestamp.now(), periods=days, freq='B')
+        # Normalize to midnight to ensure consistent dates across all tickers
+        dates = pd.date_range(end=pd.Timestamp.now().normalize(), periods=days, freq='B')
         
         data_frames = {}
         for ticker in tickers:

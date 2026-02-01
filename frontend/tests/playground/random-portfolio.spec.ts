@@ -5,7 +5,7 @@ import { createPlan } from '../test-utils';
  * US-PG-03: Generate Random Portfolio
  * 
  * Acceptance Criteria:
- * - "🎲 Generate Random Portfolio" button visible in HistoricalReplay
+ * - "🎲 Random" button visible in Historical Audit
  * - Clicking button randomly selects:
  *   - Strategy template
  *   - Account type
@@ -13,6 +13,10 @@ import { createPlan } from '../test-utils';
  * - Form fields pre-filled with random values
  * - Can still edit values before running
  * - Random selection happens quickly
+ * 
+ * UI Labels:
+ * - Heading: "Historical Audit" (not "Historical Replay")
+ * - Button: "Run Fear Test" (not "Run Backtest")
  */
 
 test.describe('Generate Random Portfolio', () => {
@@ -23,8 +27,8 @@ test.describe('Generate Random Portfolio', () => {
         // Navigate to Playground tab
         await page.getByRole('tab', { name: /Playground/i }).click();
 
-        // Should be in Historical Replay by default
-        await expect(page.getByRole('heading', { name: /Historical Replay/i })).toBeVisible();
+        // Should be in Historical Audit by default
+        await expect(page.getByRole('heading', { name: /Historical Audit/i })).toBeVisible();
     });
 
     test('should display random portfolio button', async ({ page }) => {
@@ -108,8 +112,8 @@ test.describe('Generate Random Portfolio', () => {
         // Verify custom value is set
         await expect(amountInput).toHaveValue('25000');
 
-        // Should still be able to run backtest with custom value
-        const runButton = page.getByRole('button', { name: /Run Backtest/i });
+        // Should still be able to run fear test with custom value
+        const runButton = page.getByRole('button', { name: /Run Fear Test/i });
         await expect(runButton).toBeEnabled();
     });
 
@@ -146,12 +150,12 @@ test.describe('Generate Random Portfolio', () => {
         expect(duration).toBeLessThan(3000);
     });
 
-    test('should not auto-run backtest after random generation', async ({ page }) => {
+    test('should not auto-run fear test after random generation', async ({ page }) => {
         const randomButton = page.getByRole('button', { name: /Random/i }).filter({ hasText: /🎲/ });
         await randomButton.click();
 
-        // Run Backtest button should still be visible (not replaced by "Running Backtest")
-        await expect(page.getByRole('button', { name: /^Run Backtest$/i })).toBeVisible();
+        // Run Fear Test button should still be visible (not replaced by "Running Fear Test")
+        await expect(page.getByRole('button', { name: /Run Fear Test/i })).toBeVisible();
 
         // Should NOT see loading state
         const loadingIndicator = page.locator('.loading').filter({ hasText: /Running/i });

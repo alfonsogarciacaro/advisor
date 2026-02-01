@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const frontendTestPort = 3100;
+const backendTestPort = 8100;
+
 export default defineConfig({
     testDir: './tests',
     fullyParallel: true,
@@ -12,7 +15,7 @@ export default defineConfig({
         timeout: process.env.CI ? 10000 : 5000,
     },
     use: {
-        baseURL: 'http://localhost:3001',
+        baseURL: 'http://localhost:' + frontendTestPort,
         trace: 'on-first-retry',
     },
     projects: [
@@ -22,8 +25,8 @@ export default defineConfig({
         },
     ],
     webServer: {
-        command: 'npm run dev -- --port 3001',
-        url: 'http://localhost:3001',
+        command: 'npm run dev -- --port ' + frontendTestPort,
+        url: 'http://localhost:' + frontendTestPort,
         reuseExistingServer: false,
         stderr: 'pipe',
         timeout: 120 * 1000,
@@ -31,7 +34,7 @@ export default defineConfig({
             stdout: /ready/i
         },
         env: {
-            NEXT_PUBLIC_API_URL: 'http://localhost:8001',
+            NEXT_PUBLIC_API_URL: 'http://localhost:' + backendTestPort,
         },
     },
 });

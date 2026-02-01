@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { BacktestResult } from '../lib/api-client';
 import { getHistoricalEvents } from '../lib/historical-events';
+import DrawdownChart from './charts/DrawdownChart';
 
 interface BacktestResultsProps {
     result: BacktestResult;
@@ -53,8 +54,18 @@ export default function BacktestResults({ result, currency = 'USD' }: BacktestRe
         : [];
 
     return (
-        <div className="card bg-base-200 p-6">
-            <h3 className="text-xl font-bold mb-6">📊 Backtest Results</h3>
+        <div className="card bg-base-200 p-6 border-l-4 border-error">
+            <div className="flex items-start gap-4 mb-6">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-error shrink-0">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+                <div>
+                    <h3 className="text-xl font-bold text-error">Fear Test Results</h3>
+                    <p className="text-sm text-base-content/70 mt-1">
+                        Would you have sold? Be honest with yourself.
+                    </p>
+                </div>
+            </div>
 
             {/* Tax Alert if applicable */}
             {result.capital_gains_tax && result.capital_gains_tax > 0 && (
@@ -77,8 +88,22 @@ export default function BacktestResults({ result, currency = 'USD' }: BacktestRe
                 </div>
             )}
 
-            {/* Key Metrics */}
+            {/* Key Metrics - Max Drawdown First */}
             <div className="stats stats-vertical lg:stats-horizontal shadow mb-6">
+                {/* Max Drawdown - Primary Metric for Fear Testing */}
+                <div className="stat">
+                    <div className="stat-title text-error font-semibold">Max Drawdown (Fear Test)</div>
+                    <div className="stat-value text-error text-3xl">
+                        {formatPercent(result.metrics.max_drawdown)}
+                    </div>
+                    <div className="stat-desc">
+                        {result.metrics.recovery_days
+                            ? `Recovered in ${Math.floor(result.metrics.recovery_days / 30)} months`
+                            : 'Never fully recovered'
+                        }
+                    </div>
+                </div>
+
                 <div className="stat">
                     <div className="stat-title">Final Value</div>
                     <div className="stat-value text-primary text-2xl">
@@ -93,19 +118,6 @@ export default function BacktestResults({ result, currency = 'USD' }: BacktestRe
                             {formatPercent(result.metrics.pre_tax_total_return)} pre-tax
                         </div>
                     )}
-                </div>
-
-                <div className="stat">
-                    <div className="stat-title">Worst Case (Max Drawdown)</div>
-                    <div className="stat-value text-error text-2xl">
-                        {formatPercent(result.metrics.max_drawdown)}
-                    </div>
-                    <div className="stat-desc">
-                        {result.metrics.recovery_days
-                            ? `Recovered in ${Math.floor(result.metrics.recovery_days / 30)} months`
-                            : 'Never fully recovered'
-                        }
-                    </div>
                 </div>
 
                 <div className="stat">
@@ -129,8 +141,19 @@ export default function BacktestResults({ result, currency = 'USD' }: BacktestRe
                 </div>
             </div>
 
-            {/* Chart */}
-            <div className="h-96 mb-6">
+            {/* Drawdown Chart - Fear Testing */}
+            <div className="mb-6">
+                <DrawdownChart result={result} currency={currency} />
+            </div>
+
+            {/* Portfolio Value Chart */}
+            <div className="h-80 mb-6">
+                <h4 className="font-bold mb-4 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
+                    </svg>
+                    Portfolio Value Over Time
+                </h4>
                 <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={chartData}>
                         <CartesianGrid strokeDasharray="3 3" />
@@ -139,10 +162,10 @@ export default function BacktestResults({ result, currency = 'USD' }: BacktestRe
                             interval="preserveStartEnd"
                         />
                         <YAxis
-                            tickFormatter={(value) => formatCurrency(value)}
+                            tickFormatter={(value) => formatCurrency(value ?? 0)}
                         />
                         <Tooltip
-                            formatter={(value: number) => formatCurrency(value)}
+                            formatter={(value: number | undefined) => formatCurrency(value ?? 0)}
                             labelFormatter={(label) => `Date: ${label}`}
                         />
                         <Legend />
@@ -189,34 +212,33 @@ export default function BacktestResults({ result, currency = 'USD' }: BacktestRe
                 </div>
             )}
 
-            {/* Educational Insights */}
-            <div className="alert alert-info">
+            {/* Educational Insights - Fear Testing Focus */}
+            <div className={`alert border-l-4 border-error`}>
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 <div>
-                    <h3 className="font-bold">How to Interpret This</h3>
+                    <h3 className="font-bold">Fear Testing Analysis</h3>
                     <div className="text-sm space-y-1">
                         <p>
-                            • If you invested on <strong>
+                            If you invested on <strong>
                                 {result.start_date && new Date(result.start_date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                            </strong>, you would have{' '}
-                            <strong className={result.metrics.total_return >= 0 ? 'text-success' : 'text-error'}>
-                                {result.metrics.total_return >= 0 ? 'gained' : 'lost'}
-                                {formatPercent(Math.abs(result.metrics.total_return))}
-                            </strong> by today.
+                            </strong>, your portfolio would have dropped <strong className="text-error">{formatPercent(Math.abs(result.metrics.max_drawdown))}</strong> at its worst point.
+                        </p>
+                        <p className="text-error font-semibold">
+                            ⚠️ Would you have sold?
+                        </p>
+                        <p className="text-xs text-base-content/70">
+                            Most investors panic and sell at the bottom. If you would have sold during this drawdown, you may need to reduce your risk exposure.
                         </p>
                         <p>
-                            • The worst drop was <strong>{formatPercent(Math.abs(result.metrics.max_drawdown))}</strong>.
-                        </p>
-                        <p>
-                            • {result.metrics.recovery_days
+                            {result.metrics.recovery_days
                                 ? `It took ${Math.floor(result.metrics.recovery_days / 30)} months to recover from the worst drop.`
                                 : 'The portfolio never fully recovered from its worst drop.'}
                         </p>
                         {result.metrics.total_return >= 0 ? (
                             <p className="text-success font-semibold">
-                                ✅ This strategy would have grown your wealth over this period.
+                                ✅ Despite the drawdowns, this strategy would have grown your wealth over this period.
                             </p>
                         ) : (
                             <p className="text-warning">

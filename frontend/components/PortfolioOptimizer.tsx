@@ -137,8 +137,8 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
                 </h2>
 
                 {/* Input Form */}
-                <div className="flex flex-wrap gap-4 mt-4">
-                    <div className="form-control">
+                <div className="flex flex-col md:flex-row md:flex-wrap gap-4 mt-4">
+                    <div className="form-control w-full md:w-auto">
                         <label className="label" htmlFor="investment-amount">
                             <span className="label-text">Investment Amount</span>
                         </label>
@@ -149,12 +149,12 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
                             step="100"
                             value={amount}
                             onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-                            className="input input-bordered w-48"
+                            className="input input-bordered w-full md:w-48"
                             disabled={isRunning}
                         />
                     </div>
 
-                    <div className="form-control">
+                    <div className="form-control w-full md:w-auto">
                         <label className="label" htmlFor="currency">
                             <span className="label-text">Currency</span>
                         </label>
@@ -162,7 +162,7 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
                             id="currency"
                             value={currency}
                             onChange={(e) => setCurrency(e.target.value)}
-                            className="select select-bordered w-32"
+                            className="select select-bordered w-full md:w-32"
                             disabled={isRunning}
                         >
                             {currencies.map((c) => (
@@ -173,14 +173,14 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
                         </select>
                     </div>
 
-                    <div className="form-control">
-                        <label className="label">
-                            <span className="label-text opacity-0">Action</span>
+                    <div className="form-control w-full md:w-auto">
+                        <label className="label md:opacity-0 hidden md:block">
+                            <span className="label-text">Action</span>
                         </label>
                         <button
                             onClick={startOptimization}
                             disabled={isRunning}
-                            className="btn btn-primary"
+                            className="btn btn-primary w-full md:w-auto"
                         >
                             {isRunning ? (
                                 <>
@@ -193,21 +193,21 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
                         </button>
                     </div>
 
-                    <div className="form-control">
-                        <label className="label">
-                            <span className="label-text opacity-0">Debug</span>
+                    <div className="form-control w-full md:w-auto">
+                        <label className="label md:opacity-0 hidden md:block">
+                            <span className="label-text">Debug</span>
                         </label>
                         <button
                             onClick={() => setShowDebug(!showDebug)}
-                            className="btn btn-ghost btn-sm"
+                            className="btn btn-ghost btn-sm w-full md:w-auto mt-2 md:mt-0"
                         >
                             {showDebug ? 'Hide Debug' : 'Show Debug'}
                         </button>
                     </div>
 
-                    <div className="form-control">
-                        <label className="label">
-                            <span className="label-text opacity-0">Cache</span>
+                    <div className="form-control w-full md:w-auto">
+                        <label className="label md:opacity-0 hidden md:block">
+                            <span className="label-text">Cache</span>
                         </label>
                         <button
                             onClick={async () => {
@@ -234,7 +234,7 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
                                 }
                             }}
                             disabled={isRunning}
-                            className="btn btn-warning btn-sm"
+                            className="btn btn-warning btn-sm w-full md:w-auto mt-2 md:mt-0"
                         >
                             Clear Cache
                         </button>

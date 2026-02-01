@@ -84,37 +84,37 @@ export default function PlanDetail({ plan, onBack, onPlanUpdate }: PlanDetailPro
         <div className="space-y-6">
             {/* Header */}
             <div className="flex items-center gap-4">
-                <button onClick={onBack} className="btn btn-ghost btn-sm">
+                <button onClick={onBack} className="btn btn-ghost btn-sm px-2 md:px-4">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
                     </svg>
-                    Back to Plans
+                    <span className="hidden md:inline">Back to Plans</span>
                 </button>
-                <div className="flex-1">
-                    <h1 className="text-2xl font-bold">{localPlan.name}</h1>
+                <div className="flex-1 min-w-0">
+                    <h1 className="text-xl md:text-2xl font-bold truncate">{localPlan.name}</h1>
                     {localPlan.description && (
-                        <p className="text-base-content/60 text-sm mt-1">{localPlan.description}</p>
+                        <p className="text-base-content/60 text-xs md:text-sm mt-1 truncate">{localPlan.description}</p>
                     )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 shrink-0">
                     <button
                         onClick={() => setShowPortfolioEditor(true)}
-                        className="btn btn-outline btn-sm"
+                        className="btn btn-outline btn-sm px-2 md:px-4"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
                         </svg>
-                        Edit Portfolio
+                        <span className="hidden md:inline">Edit Portfolio</span>
                     </button>
                     {localPlan.optimization_result && (
                         <button
                             onClick={() => setShowOptimizer(!showOptimizer)}
-                            className="btn btn-outline btn-sm"
+                            className="btn btn-outline btn-sm hidden md:inline-flex"
                         >
                             {showOptimizer ? 'Hide' : 'Show'} Optimizer
                         </button>
                     )}
-                    <div className="badge badge-ghost">{localPlan.risk_preference.replace('_', ' ')}</div>
+                    <div className="badge badge-ghost hidden md:inline-flex">{localPlan.risk_preference.replace('_', ' ')}</div>
                 </div>
             </div>
 

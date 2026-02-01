@@ -7,11 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "type-check": "tsc --noEmit",
-    "test": "npm run test:integration",
-    "test:integration": "concurrently -k -s first \"npm:test:backend\" \"npm:test:frontend\"",
-    "test:backend": "cd ../backend && uv run python start_test_server.py",
-    "test:frontend": "npx playwright test"
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@google-cloud/firestore": "^7.10.0",
@@ -34,7 +30,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.5",
     "tailwindcss": "^4",
-    "typescript": "^5",
-    "concurrently": "^9.1.2"
+    "typescript": "^5"
   }
 }

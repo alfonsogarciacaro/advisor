@@ -166,13 +166,21 @@ export default function PlanManager({ onPlanSelect, currentPlanId }: PlanManager
                     /* Plans List */
                     <div className="space-y-3 mt-4">
                         {plans.map((plan) => (
-                            <button
+                            <div
                                 key={plan.plan_id}
+                                role="button"
+                                tabIndex={0}
                                 className={`card bg-base-200 border cursor-pointer transition-all text-left ${currentPlanId === plan.plan_id
-                                        ? 'border-primary shadow-md'
-                                        : 'border-base-300 hover:border-base-content/20'
+                                    ? 'border-primary shadow-md'
+                                    : 'border-base-300 hover:border-base-content/20'
                                     }`}
                                 onClick={() => onPlanSelect(plan)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        onPlanSelect(plan);
+                                    }
+                                }}
                                 aria-label={`Plan: ${plan.name}`}
                             >
                                 <div className="card-body p-4">
@@ -209,7 +217,7 @@ export default function PlanManager({ onPlanSelect, currentPlanId }: PlanManager
                                         </div>
                                     </div>
                                 </div>
-                            </button>
+                            </div>
                         ))}
                     </div>
                 )}
@@ -217,7 +225,7 @@ export default function PlanManager({ onPlanSelect, currentPlanId }: PlanManager
                 {/* Create Plan Modal */}
                 {showCreateModal && (
                     <dialog className="modal modal-open">
-                        <div className="modal-box">
+                        <div className="modal-box w-11/12 max-w-lg">
                             <h3 className="font-bold text-lg">Create New Investment Plan</h3>
 
                             <div className="py-4 space-y-4">

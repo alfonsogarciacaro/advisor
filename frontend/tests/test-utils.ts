@@ -8,16 +8,24 @@ export const createPlan = async (page: Page, name: string) => {
     }
 
     // Click "New Plan" or "Create Your First Plan"
-    // Use a broad selector that matches either
-    const createButton = page.getByRole('button', { name: /create.*plan|new plan/i });
-    if (await createButton.isVisible()) {
-        await createButton.click();
+    // Click "New Plan" or "Create Your First Plan"
+    const firstPlanBtn = page.getByRole('button', { name: 'Create Your First Plan' });
+    const newPlanBtn = page.getByRole('button', { name: 'New Plan' });
+
+    if (await firstPlanBtn.isVisible()) {
+        await firstPlanBtn.click();
+    } else if (await newPlanBtn.isVisible()) {
+        await newPlanBtn.click();
     } else {
         // Maybe we are already in a plan? Check if Back button exists
         const backButton = page.getByRole('button', { name: 'Back to Plans' });
         if (await backButton.isVisible()) {
             await backButton.click();
-            await createButton.click();
+            if (await newPlanBtn.isVisible()) {
+                await newPlanBtn.click();
+            } else {
+                await firstPlanBtn.click();
+            }
         }
     }
 

@@ -2,7 +2,7 @@
 import yfinance as yf
 import pandas as pd
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 from .currency_provider import CurrencyProvider
 
@@ -84,7 +84,7 @@ class YFinanceCurrencyProvider(CurrencyProvider):
         end_date: Optional[str] = None
     ) -> pd.DataFrame:
         if from_currency == to_currency:
-             end = end_date or datetime.now().strftime("%Y-%m-%d")
+             end = end_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
              dates = pd.date_range(start=start_date, end=end, freq="D")
              return pd.DataFrame({"date": dates, "rate": 1.0})
 

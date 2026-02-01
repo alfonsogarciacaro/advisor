@@ -3,6 +3,9 @@ import { createPlan } from '../test-utils';
 
 /**
  * PLAYGROUND FEATURE TESTS - PRESET HISTORICAL PERIODS
+ * 
+ * UI Labels:
+ * - Selected preset buttons use btn-error class (not btn-primary)
  */
 
 test.describe('Preset Historical Periods', () => {
@@ -85,19 +88,22 @@ test.describe('Preset Historical Periods', () => {
     });
 
     test('should highlight selected preset', async ({ page }) => {
-        // Initially, 2020-01-01 (Pre-COVID) should be selected
+        // Click Pre-COVID
+        await page.getByRole('button', { name: /Pre-COVID/i }).click();
+
+        // Selected preset should have btn-error class
         const preCovidButton = page.getByRole('button', { name: /Pre-COVID/i });
-        await expect(preCovidButton).toHaveClass(/btn-primary/);
+        await expect(preCovidButton).toHaveClass(/btn-error/);
 
         // Click a different preset
         await page.getByRole('button', { name: /5 Years Ago/i }).click();
 
         // New preset should be highlighted
         const fiveYearsButton = page.getByRole('button', { name: /5 Years Ago/i });
-        await expect(fiveYearsButton).toHaveClass(/btn-primary/);
+        await expect(fiveYearsButton).toHaveClass(/btn-error/);
 
         // Previous preset should not be highlighted
-        await expect(preCovidButton).not.toHaveClass(/btn-primary/);
+        await expect(preCovidButton).not.toHaveClass(/btn-error/);
     });
 
     test('should allow changing preset selection', async ({ page }) => {
@@ -134,8 +140,8 @@ test.describe('Preset Historical Periods', () => {
 
     test('should show meaningful labels for each preset', async ({ page }) => {
         // Each button should have a descriptive label
-        await expect(page.getByRole('button', { name: /Pre-COVID.*Jan 2020/i })).toBeVisible();
-        await expect(page.getByRole('button', { name: /Pre-2008 Crisis.*Jan 2008/i })).toBeVisible();
+        await expect(page.getByRole('button', { name: /Pre-COVID/i })).toBeVisible();
+        await expect(page.getByRole('button', { name: /Pre-2008 Crisis/i })).toBeVisible();
         await expect(page.getByRole('button', { name: /Post-COVID Recovery/i })).toBeVisible();
     });
 

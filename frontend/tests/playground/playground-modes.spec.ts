@@ -5,6 +5,12 @@ import { createPlan } from '../test-utils';
  * PLAYGROUND FEATURE TESTS - PLAYGROUND MODES
  *
  * These tests verify the Playground & Historical Analysis feature.
+ * 
+ * UI Labels:
+ * - Tab 1: "Historical Audit" (not "Historical Replay")
+ * - Tab 2: "Scenario Lab" (not "Future Simulation")
+ * - Button: "Run Fear Test" (not "Run Backtest")
+ * - Selected items use btn-error class (not btn-primary)
  */
 
 test.describe('Playground Modes', () => {
@@ -21,40 +27,32 @@ test.describe('Playground Modes', () => {
     });
 
     test('should display mode switcher tabs', async ({ page }) => {
-        // Should show both tabs: Historical Replay and Future Simulation (disabled)
-        const historicalTab = page.getByRole('tab', { name: /Historical Replay/i });
+        // Should show both tabs: Historical Audit and Scenario Lab
+        const historicalTab = page.getByRole('tab', { name: /Historical Audit/i });
         await expect(historicalTab).toBeVisible();
 
-        const futureTab = page.getByRole('tab', { name: /Future Simulation/i });
-        await expect(futureTab).toBeVisible();
-
-        // Future Simulation should be disabled with "Coming Soon" badge
-        await expect(futureTab).toHaveAttribute('disabled');
-        await expect(page.getByText('Coming Soon')).toBeVisible();
+        const scenarioTab = page.getByRole('tab', { name: /Scenario Lab/i });
+        await expect(scenarioTab).toBeVisible();
     });
 
-    test('should switch to Historical Replay mode', async ({ page }) => {
-        // Historical Replay should be active by default
-        const historicalTab = page.getByRole('tab', { name: /Historical Replay/i });
+    test('should switch to Historical Audit mode', async ({ page }) => {
+        // Historical Audit should be active by default
+        const historicalTab = page.getByRole('tab', { name: /Historical Audit/i });
         await expect(historicalTab).toHaveClass(/tab-active/);
 
-        // Should show historical replay content (use heading to distinguish from tab)
-        await expect(page.getByRole('heading', { name: /Historical Replay/i })).toBeVisible();
-        await expect(page.getByText(/how this strategy would have performed/i)).toBeVisible();
+        // Should show historical audit content (use heading to distinguish from tab)
+        await expect(page.getByRole('heading', { name: /Historical Audit/i })).toBeVisible();
     });
 
-    test('should show Future Simulation as disabled', async ({ page }) => {
-        // Future Simulation tab should be disabled
-        const futureTab = page.getByRole('tab', { name: /Future Simulation/i });
-        await expect(futureTab).toHaveAttribute('disabled');
-
-        // Should show "Coming Soon" badge
-        await expect(page.getByText('Coming Soon')).toBeVisible();
+    test('should show Scenario Lab tab', async ({ page }) => {
+        // Scenario Lab tab should be visible
+        const scenarioTab = page.getByRole('tab', { name: /Scenario Lab/i });
+        await expect(scenarioTab).toBeVisible();
     });
 
     test('should persist mode selection during session', async ({ page }) => {
-        // Historical Replay should be active
-        const historicalTab = page.getByRole('tab', { name: /Historical Replay/i });
+        // Historical Audit should be active
+        const historicalTab = page.getByRole('tab', { name: /Historical Audit/i });
         await expect(historicalTab).toHaveClass(/tab-active/);
 
         // Navigate away and back - mode should persist
@@ -62,41 +60,38 @@ test.describe('Playground Modes', () => {
         await page.waitForTimeout(300);
         await page.getByRole('tab', { name: 'Playground' }).click();
 
-        // Historical Replay should still be active
+        // Historical Audit should still be active
         await expect(historicalTab).toHaveClass(/tab-active/);
     });
 
-    test('should show appropriate action button for Historical Replay', async ({ page }) => {
-        // Should show "Run Backtest" button
-        const runButton = page.getByRole('button', { name: /Run Backtest/i });
+    test('should show appropriate action button for Historical Audit', async ({ page }) => {
+        // Should show "Run Fear Test" button
+        const runButton = page.getByRole('button', { name: /Run Fear Test/i });
         await expect(runButton).toBeVisible();
     });
 
     test('should show mode-specific help text', async ({ page }) => {
-        // Historical Replay should have description
-        await expect(page.getByText(/Test different investment strategies using historical data/i)).toBeVisible();
-        await expect(page.getByText(/how they would have performed/i)).toBeVisible();
+        // Historical Audit should have description about fear testing
+        await expect(page.getByText(/Would you have sold/i)).toBeVisible();
     });
 
     test('should visually distinguish active mode', async ({ page }) => {
-        const activeTab = page.getByRole('tab', { name: /Historical Replay/i });
-        const inactiveTab = page.getByRole('tab', { name: /Future Simulation/i });
+        const activeTab = page.getByRole('tab', { name: /Historical Audit/i });
+        const scenarioTab = page.getByRole('tab', { name: /Scenario Lab/i });
 
         // Active tab should have different class
         await expect(activeTab).toHaveClass(/tab-active/);
-        await expect(inactiveTab).not.toHaveClass(/tab-active/);
+        await expect(scenarioTab).not.toHaveClass(/tab-active/);
     });
 
-    test('should show investment amount and date inputs in Historical Replay', async ({ page }) => {
+    test('should show investment amount and date inputs in Historical Audit', async ({ page }) => {
         // Should have investment amount input
-        const amountInput = page.getByLabel(/Investment Amount/i);
-        await expect(amountInput).toBeVisible();
+        await expect(page.locator('#investment-amount')).toBeVisible();
 
         // Should have start date input
-        const dateInput = page.getByLabel(/Start Date/i);
-        await expect(dateInput).toBeVisible();
+        await expect(page.locator('#start-date')).toBeVisible();
 
-        // Should have strategy selector
+        // Should have strategy selector heading
         await expect(page.getByText(/Strategy Template/i)).toBeVisible();
     });
 });
