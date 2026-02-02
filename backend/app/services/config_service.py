@@ -246,3 +246,8 @@ class ConfigService:
             limits[account_type] = config.get('max_investment', config.get('annual_limit', 0))
 
         return limits
+
+    def get_news_ttl_hours(self) -> int:
+        """Get news TTL in hours (default 12h)."""
+        forecasting_config = self._get_forecasting_config()
+        return forecasting_config.get("cache_ttl_hours", {}).get("news", 12)

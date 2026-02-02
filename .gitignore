@@ -30,7 +30,8 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-.env.secrets
+.env
+.cloneid
 
 # vercel
 .vercel

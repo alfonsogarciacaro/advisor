@@ -118,6 +118,7 @@ cache_ttl_hours:
   forecasts: 4
   technicals: 4
   macro: 6
+  news: 12
   market_data: 24
 
 # Technical indicator defaults

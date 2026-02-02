@@ -16,7 +16,9 @@ from app.core.dependencies import get_config_service
 async def lifespan(app: FastAPI):
     setup_logging()
     # Initialize ConfigService (load from Storage/YAML)
-    config_service = get_config_service()
+    from app.core.dependencies import get_storage_service
+    storage = get_storage_service()
+    config_service = get_config_service(storage=storage)
     await config_service.initialize()
     yield
 

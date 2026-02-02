@@ -22,6 +22,16 @@ def get_logger() -> LoggerService:
     return StdLogger()
 
 @lru_cache()
+def get_storage_service() -> StorageService:
+    return FirestoreStorage()
+
+@lru_cache()
+def get_config_service(
+    storage: StorageService = Depends(get_storage_service)
+) -> ConfigService:
+    return ConfigService(storage_service=storage)
+
+@lru_cache()
 def get_auth_service() -> AuthService:
     from app.services.auth.mock_user_provider import MockUserProvider
     # In the future we can switch based on env var
@@ -66,15 +76,13 @@ async def get_current_user_optional(
     return None # TODO: Implement correct optional logic if needed
 
 
-@lru_cache()
-def get_storage_service() -> StorageService:
-    return FirestoreStorage()
+
 
 @lru_cache()
-def get_currency_service() -> Any:
-    storage_service = get_storage_service()
-    logger_service = get_logger()
-    
+def get_currency_service(
+    storage_service: StorageService = Depends(get_storage_service),
+    logger_service: LoggerService = Depends(get_logger)
+) -> Any:
     # Choose provider based on config
     # Default to Mock unless explicitly enabled (Safety first)
     enable_yfinance = os.getenv("ENABLE_YFINANCE", "false").lower() in ["1", "true", "yes"]
@@ -91,23 +99,25 @@ def get_currency_service() -> Any:
 
 
 @lru_cache()
-def get_news_service() -> NewsService:
-    logger = get_logger()
+def get_news_service(
+    config_service: ConfigService = Depends(get_config_service),
+    storage: StorageService = Depends(get_storage_service),
+    logger: LoggerService = Depends(get_logger)
+) -> NewsService:
     if os.getenv("ALPHA_VANTAGE_API_KEY"):
         provider = AlphaVantageProvider()
     else:
         provider = MockNewsProvider()
-    storage = get_storage_service()
-    ttl = int(os.getenv("NEWS_TTL_HOURS", "12"))
+    ttl = config_service.get_news_ttl_hours()
     return NewsService(provider=provider, storage=storage, logger=logger, ttl_hours=ttl)
 
 @lru_cache()
-def get_history_service() -> HistoryService:
+def get_history_service(
+    storage: StorageService = Depends(get_storage_service),
+    logger: LoggerService = Depends(get_logger)
+) -> HistoryService:
     from app.services.history.yfinance_provider import YFinanceProvider
     from app.services.history.mock_history_provider import MockHistoryProvider
-    
-    storage = get_storage_service()
-    logger = get_logger()
     
     # Default to Mock unless explicitly enabled (Safety first)
     enable_yfinance = os.getenv("ENABLE_YFINANCE", "false").lower() in ["1", "true", "yes"]
@@ -122,31 +132,29 @@ def get_history_service() -> HistoryService:
     return HistoryService(storage, logger, provider)
 
 @lru_cache()
-def get_config_service() -> ConfigService:
-    storage = get_storage_service()
-    return ConfigService(storage_service=storage)
-
-@lru_cache()
-def get_llm_service() -> Any:
+def get_llm_service(
+    config: ConfigService = Depends(get_config_service),
+    storage: StorageService = Depends(get_storage_service)
+) -> Any:
     from app.services.llm_service import LLMService
-    config = get_config_service()
-    storage = get_storage_service()
     return LLMService(config_service=config, storage_service=storage)
 
 @lru_cache()
-def get_forecasting_engine() -> Any:
+def get_forecasting_engine(
+    history_service: HistoryService = Depends(get_history_service),
+    config_service: ConfigService = Depends(get_config_service),
+    storage_service: StorageService = Depends(get_storage_service),
+    logger: LoggerService = Depends(get_logger)
+) -> Any:
     from app.services.forecasting_engine import ForecastingEngine
-    history_service = get_history_service()
-    config_service = get_config_service()
-    storage_service = get_storage_service()
-    logger = get_logger()
     return ForecastingEngine(history_service, logger, config_service, storage_service)
 
 @lru_cache()
-def get_macro_service() -> Any:
+def get_macro_service(
+    storage: StorageService = Depends(get_storage_service),
+    logger: LoggerService = Depends(get_logger)
+) -> Any:
     from app.services.macro_service import MacroService
-    storage = get_storage_service()
-    logger = get_logger()
     return MacroService(storage, logger)
 
 @lru_cache()
@@ -219,10 +227,10 @@ def get_portfolio_optimizer_service(
 @lru_cache()
 def get_plan_service(
     storage_service: StorageService = Depends(get_storage_service),
-    config_service: ConfigService = Depends(get_config_service)
+    config_service: ConfigService = Depends(get_config_service),
+    logger: LoggerService = Depends(get_logger)
 ) -> Any:
     from app.services.plan_service import PlanService
-    logger = get_logger()
     return PlanService(storage_service, logger, config_service)
 
 

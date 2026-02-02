@@ -3,7 +3,7 @@ import pytest
 import tests.test_utils as test_utils
 
 def pytest_sessionstart(session):
-    test_utils.load_test_env()
+    test_utils.print_env_vars()
     if not test_utils.verify_storage_emulator():
         pytest.exit("Firestore emulator is not running", returncode=1)
     

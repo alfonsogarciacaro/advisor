@@ -1,27 +1,17 @@
 import os
 
-def load_test_env():
-    """
-    Automatically load .env.test to configure environment for testing (mocks, etc)
-    """
-    from dotenv import load_dotenv
-
-    # Look for .env.test in the backend root (one level up from tests/)
-    env_test_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env.test"))
-    if os.path.exists(env_test_path):
-        print(f"Loading test environment from {env_test_path}")
-        load_dotenv(env_test_path, override=True)
-    else:
-        print("WARNING: .env.test not found!")
-
+def print_env_vars():
+    print(f"BACKEND_PORT: {os.environ.get('BACKEND_PORT')}")
     print(f"GCP_PROJECT_ID: {os.environ.get('GCP_PROJECT_ID')}")
+    print(f"ENABLE_YFINANCE: {os.environ.get('ENABLE_YFINANCE')}")
+    print(f"FIRESTORE_EMULATOR_HOST: {os.environ.get('FIRESTORE_EMULATOR_HOST')}")
 
 
 def verify_storage_emulator():
     """Health check: verify Firestore emulator is running"""
     import socket
 
-    firestore_host, firestore_port = os.environ.get("FIRESTORE_EMULATOR_HOST", "localhost:8080").split(":")
+    firestore_host, firestore_port = os.environ.get("FIRESTORE_EMULATOR_HOST").split(":")
     firestore_port = int(firestore_port)
 
     try:

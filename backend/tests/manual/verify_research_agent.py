@@ -34,7 +34,7 @@ app.core.dependencies.get_storage_service = lambda: MockStorage()
 from app.core.dependencies import (
     get_agent_service, get_llm_service, get_config_service,
     get_news_service, get_history_service, get_forecasting_engine,
-    get_macro_service, get_risk_calculator
+    get_macro_service, get_risk_calculator, get_storage_service
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -44,13 +44,31 @@ async def verify_research_agent():
     print("--- Verifying Research Agent Flow ---")
     
     # Initialize dependencies manually to avoid FastAPI Depends() issues
-    print("Initializing services...")
-    config_service = get_config_service()
-    news_service = get_news_service()
-    history_service = get_history_service()
-    llm_service = get_llm_service()
-    forecasting_engine = get_forecasting_engine()
-    macro_service = get_macro_service()
+    # Need logger first (though it takes no args)
+    # We skip getting logger from dependencies because we have one here, 
+    # but the service getters need the LoggerService object.
+    # We'll rely on the default StdLogger inside the getter if we passed nothing, 
+    # OR we need to pass a logger service.
+    # Actually, the getters use Depends(get_logger). 
+    # Let's instantiate the logger service manually using the provided getter logic.
+    from app.infrastructure.logging.std_logger import StdLogger
+    logger_service = StdLogger()
+    
+    # Storage
+    storage_service = MockStorage()
+
+    print("Initializing services manually...")
+    config_service = get_config_service(storage=storage_service)
+    news_service = get_news_service(config_service=config_service, storage=storage_service, logger=logger_service)
+    history_service = get_history_service(storage=storage_service, logger=logger_service)
+    llm_service = get_llm_service(config=config_service, storage=storage_service)
+    forecasting_engine = get_forecasting_engine(
+        history_service=history_service, 
+        config_service=config_service, 
+        storage_service=storage_service, 
+        logger=logger_service
+    )
+    macro_service = get_macro_service(storage=storage_service, logger=logger_service)
     risk_calculator = get_risk_calculator()
     
     print("Initializing AgentService...")
