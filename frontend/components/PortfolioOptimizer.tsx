@@ -10,69 +10,69 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 interface PortfolioOptimizerProps {
-    initialAmount?: number;
-    initialCurrency?: string;
+    jobId?: string | null;
+    initialResult?: OptimizationResult | null;
+    onComplete?: (result: OptimizationResult) => void;
 }
 
-export default function PortfolioOptimizer({ initialAmount = 10000, initialCurrency = 'USD' }: PortfolioOptimizerProps) {
-    const [amount, setAmount] = useState<number>(initialAmount);
-    const [currency, setCurrency] = useState<string>(initialCurrency);
-    const [jobId, setJobId] = useState<string | null>(null);
-    const [result, setResult] = useState<OptimizationResult | null>(null);
-    const [isRunning, setIsRunning] = useState(false);
+export default function PortfolioOptimizer({ jobId: propJobId, initialResult, onComplete }: PortfolioOptimizerProps) {
+    const [jobId, setJobId] = useState<string | null>(propJobId || null);
+    const [result, setResult] = useState<OptimizationResult | null>(initialResult || null);
+    const [isRunning, setIsRunning] = useState(!!propJobId);
     const [error, setError] = useState<string | null>(null);
     const [showDebug, setShowDebug] = useState(false);
 
-    const currencies = ['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD'];
-
-    const startOptimization = async () => {
-        if (amount <= 0) {
-            setError('Please enter a valid investment amount');
-            return;
+    // Sync props to state
+    useEffect(() => {
+        if (propJobId && propJobId !== jobId) {
+            setJobId(propJobId);
+            setIsRunning(true);
+            setError(null);
         }
+    }, [propJobId]);
 
-        setIsRunning(true);
-        setError(null);
-        setResult(null);
-
-        try {
-            const response = await optimizePortfolio(amount, currency);
-            setJobId(response.job_id);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to start optimization');
-            setIsRunning(false);
+    useEffect(() => {
+        if (initialResult) {
+            setResult(initialResult);
         }
-    };
+    }, [initialResult]);
 
+    // Polling effect (kept from original, but simplified)
     useEffect(() => {
         if (!jobId) return;
 
         let interval: NodeJS.Timeout | null = null;
+        let isJobComplete = false;
 
         const pollStatus = async () => {
+            if (isJobComplete) return;
+
             try {
                 const status = await getOptimizationStatus(jobId);
-                console.log('Optimization status:', status);
-                console.log('Efficient frontier length:', status.efficient_frontier?.length);
-                console.log('Scenarios length:', status.scenarios?.length);
-                console.log('Scenarios:', status.scenarios);
+                console.log('Optimization status:', status.status);
                 setResult(status);
 
                 if (status.status === 'completed' || status.status === 'failed') {
                     setIsRunning(false);
-                    if (status.error) {
-                        setError(status.error);
+                    isJobComplete = true; // Prevent further polling
+
+                    if (status.status === 'failed') {
+                        setError(status.error || 'Optimization failed');
+                    } else {
+                        // Notify parent
+                        onComplete?.(status);
                     }
-                    // Clear the interval when job completes
+
                     if (interval) {
                         clearInterval(interval);
                         interval = null;
                     }
                 }
             } catch (err) {
+                console.error('Poll error:', err);
                 setError(err instanceof Error ? err.message : 'Failed to fetch status');
                 setIsRunning(false);
-                // Clear the interval on error
+                isJobComplete = true;
                 if (interval) {
                     clearInterval(interval);
                     interval = null;
@@ -80,6 +80,7 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
             }
         };
 
+        // Poll immediately and then every 2s
         pollStatus();
         interval = setInterval(pollStatus, 2000);
 
@@ -91,6 +92,8 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
     }, [jobId]);
 
     const formatCurrency = (value: number) => {
+        // Use result currency or default to USD (should be passed from plan really, but result has it)
+        const currency = result?.currency || 'USD';
         return new Intl.NumberFormat('en-US', {
             style: 'currency',
             currency: currency,
@@ -109,6 +112,13 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
     };
 
     const getStatusBadge = () => {
+        if (!result && !isRunning) return null;
+
+        // If running but no result yet
+        if (isRunning && !result) {
+            return <span className="badge badge-info animate-pulse">STARTING</span>;
+        }
+
         if (!result) return null;
 
         const statusMap = {
@@ -131,115 +141,21 @@ export default function PortfolioOptimizer({ initialAmount = 10000, initialCurre
     return (
         <div className="card bg-base-100 shadow-xl border border-base-200">
             <div className="card-body">
-                <h2 className="card-title">
-                    Portfolio Optimizer
-                    {result && getStatusBadge()}
-                </h2>
-
-                {/* Input Form */}
-                <div className="flex flex-col md:flex-row md:flex-wrap gap-4 mt-4">
-                    <div className="form-control w-full md:w-auto">
-                        <label className="label" htmlFor="investment-amount">
-                            <span className="label-text">Investment Amount</span>
-                        </label>
-                        <input
-                            id="investment-amount"
-                            type="number"
-                            min="100"
-                            step="100"
-                            value={amount}
-                            onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-                            className="input input-bordered w-full md:w-48"
-                            disabled={isRunning}
-                        />
-                    </div>
-
-                    <div className="form-control w-full md:w-auto">
-                        <label className="label" htmlFor="currency">
-                            <span className="label-text">Currency</span>
-                        </label>
-                        <select
-                            id="currency"
-                            value={currency}
-                            onChange={(e) => setCurrency(e.target.value)}
-                            className="select select-bordered w-full md:w-32"
-                            disabled={isRunning}
-                        >
-                            {currencies.map((c) => (
-                                <option key={c} value={c}>
-                                    {c}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div className="form-control w-full md:w-auto">
-                        <label className="label md:opacity-0 hidden md:block">
-                            <span className="label-text">Action</span>
-                        </label>
-                        <button
-                            onClick={startOptimization}
-                            disabled={isRunning}
-                            className="btn btn-primary w-full md:w-auto"
-                        >
-                            {isRunning ? (
-                                <>
-                                    <span className="loading loading-spinner loading-sm"></span>
-                                    Optimizing...
-                                </>
-                            ) : (
-                                'Optimize Portfolio'
-                            )}
-                        </button>
-                    </div>
-
-                    <div className="form-control w-full md:w-auto">
-                        <label className="label md:opacity-0 hidden md:block">
-                            <span className="label-text">Debug</span>
-                        </label>
-                        <button
-                            onClick={() => setShowDebug(!showDebug)}
-                            className="btn btn-ghost btn-sm w-full md:w-auto mt-2 md:mt-0"
-                        >
-                            {showDebug ? 'Hide Debug' : 'Show Debug'}
-                        </button>
-                    </div>
-
-                    <div className="form-control w-full md:w-auto">
-                        <label className="label md:opacity-0 hidden md:block">
-                            <span className="label-text">Cache</span>
-                        </label>
-                        <button
-                            onClick={async () => {
-                                if (jobId) {
-                                    try {
-                                        await clearOptimizationCache(jobId);
-                                        alert(`Cleared cache for job ${jobId}`);
-                                        setJobId(null);
-                                        setResult(null);
-                                    } catch (err) {
-                                        alert(err instanceof Error ? err.message : 'Failed to clear cache');
-                                    }
-                                } else if (result?.job_id) {
-                                    try {
-                                        await clearOptimizationCache(result.job_id);
-                                        alert(`Cleared cache for job ${result.job_id}`);
-                                        setJobId(null);
-                                        setResult(null);
-                                    } catch (err) {
-                                        alert(err instanceof Error ? err.message : 'Failed to clear cache');
-                                    }
-                                } else {
-                                    alert('No job to clear');
-                                }
-                            }}
-                            disabled={isRunning}
-                            className="btn btn-warning btn-sm w-full md:w-auto mt-2 md:mt-0"
-                        >
-                            Clear Cache
-                        </button>
-                    </div>
+                <div className="flex justify-between items-center">
+                    <h2 className="card-title">
+                        Optimization Results
+                        {getStatusBadge()}
+                    </h2>
+                    <button
+                        onClick={() => setShowDebug(!showDebug)}
+                        className="btn btn-ghost btn-xs"
+                    >
+                        {showDebug ? 'Hide Debug' : 'Debug'}
+                    </button>
                 </div>
+
+
+
 
                 {/* Debug Info */}
                 {showDebug && (

@@ -30,6 +30,7 @@ export default function PortfolioEditor({ planId, initialPortfolio = [], onSave,
     const [holdings, setHoldings] = useState<FormHolding[]>([]);
     const [availableEtfs, setAvailableEtfs] = useState<EtfInfo[]>([]);
     const [accountLimits, setAccountLimits] = useState<Record<string, AccountLimitInfo>>({});
+    const [initialAccountUsage, setInitialAccountUsage] = useState<Record<string, number>>({});
     const [validationErrors, setValidationErrors] = useState<string[]>([]);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -40,7 +41,21 @@ export default function PortfolioEditor({ planId, initialPortfolio = [], onSave,
         const loadData = async () => {
             try {
                 const response = await getAvailableEtfs(planId);
-                setAvailableEtfs(response.etfs);
+
+                // Add Cash option
+                const etfsWithCash = [
+                    ...response.etfs,
+                    {
+                        symbol: 'CASH',
+                        name: 'Cash (JPY)',
+                        eligible_accounts: ['taxable', 'nisa_growth', 'nisa_general', 'ideco', 'dc_pension', 'other'] as TaxAccountType[],
+                        market: 'Money Market',
+                        native_currency: baseCurrency,
+                        current_price_base: 1.0
+                    }
+                ];
+
+                setAvailableEtfs(etfsWithCash);
                 setAccountLimits(response.account_limits);
 
                 // Initialize with existing portfolio
@@ -48,8 +63,15 @@ export default function PortfolioEditor({ planId, initialPortfolio = [], onSave,
                     setHoldings(initialPortfolio.map(h => ({
                         ticker: h.ticker,
                         account_type: h.account_type,
-                        monetary_value: h.monetary_value.toString()
+                        monetary_value: h.monetary_value.toLocaleString('en-US', { maximumFractionDigits: 2 })
                     })));
+
+                    // Calculate initial usage per account type
+                    const usage: Record<string, number> = {};
+                    initialPortfolio.forEach(h => {
+                        usage[h.account_type] = (usage[h.account_type] || 0) + h.monetary_value;
+                    });
+                    setInitialAccountUsage(usage);
                 }
             } catch (error) {
                 console.error('Error loading data:', error);
@@ -85,6 +107,12 @@ export default function PortfolioEditor({ planId, initialPortfolio = [], onSave,
         setValidationErrors([]);
     };
 
+    const parseMonetaryValue = (value: string): number => {
+        // Remove commas and parse
+        const cleanValue = value.replace(/,/g, '');
+        return parseFloat(cleanValue) || 0;
+    };
+
     const handleSave = async () => {
         setIsSaving(true);
         setValidationErrors([]);
@@ -96,7 +124,7 @@ export default function PortfolioEditor({ planId, initialPortfolio = [], onSave,
                 .map(h => ({
                     ticker: h.ticker,
                     account_type: h.account_type,
-                    monetary_value: parseFloat(h.monetary_value)
+                    monetary_value: parseMonetaryValue(h.monetary_value)
                 }));
 
             // Validate holdings
@@ -120,13 +148,30 @@ export default function PortfolioEditor({ planId, initialPortfolio = [], onSave,
     const getAccountUsage = (accountType: TaxAccountType) => {
         const currentUsage = holdings
             .filter(h => h.account_type === accountType)
-            .reduce((sum, h) => sum + (parseFloat(h.monetary_value) || 0), 0);
+            .reduce((sum, h) => sum + parseMonetaryValue(h.monetary_value), 0);
 
         const limit = accountLimits[accountType];
         if (!limit) return null;
 
         const existingUsage = limit.used_space;
-        const totalUsage = existingUsage + currentUsage;
+        const initialUsage = initialAccountUsage[accountType] || 0;
+        // Subtract existing portfolio contribution from used space (min 0)
+        const baseUsage = Math.max(0, existingUsage - initialUsage);
+        const totalUsage = baseUsage + currentUsage;
+
+        // Handle unlimited accounts (limit 0)
+        if (limit.annual_limit === 0) {
+            return {
+                current: currentUsage,
+                existing: existingUsage,
+                total: totalUsage,
+                limit: 0,
+                percentage: 0,
+                isOverLimit: false,
+                isUnlimited: true
+            };
+        }
+
         const percentage = (totalUsage / limit.annual_limit) * 100;
 
         return {
@@ -135,12 +180,29 @@ export default function PortfolioEditor({ planId, initialPortfolio = [], onSave,
             total: totalUsage,
             limit: limit.annual_limit,
             percentage,
-            isOverLimit: totalUsage > limit.annual_limit
+            isOverLimit: totalUsage > limit.annual_limit,
+            isUnlimited: false
         };
     };
 
     const formatCurrency = (value: number) => {
         return `${currencySymbol}${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    };
+
+    const handleMonetaryChange = (index: number, value: string) => {
+        // Allow digits, commas, and one decimal point
+        if (/^[\d,]*\.?\d*$/.test(value)) {
+            updateHolding(index, 'monetary_value', value);
+        }
+    };
+
+    const handleMonetaryBlur = (index: number) => {
+        const value = holdings[index].monetary_value;
+        if (!value) return;
+
+        const parsed = parseMonetaryValue(value);
+        // Re-format with commas
+        updateHolding(index, 'monetary_value', parsed.toLocaleString('en-US', { maximumFractionDigits: 2 }));
     };
 
     if (isLoading) {
@@ -222,14 +284,13 @@ export default function PortfolioEditor({ planId, initialPortfolio = [], onSave,
                                         <div className="form-control">
                                             <label className="label"><span className="label-text">Value ({baseCurrency})</span></label>
                                             <input
-                                                type="number"
+                                                type="text"
                                                 className="input input-bordered"
                                                 aria-label={`Value (${baseCurrency})`}
                                                 placeholder={`e.g., ${currencySymbol}1,000,000`}
                                                 value={holding.monetary_value}
-                                                onChange={(e) => updateHolding(index, 'monetary_value', e.target.value)}
-                                                min="0"
-                                                step="0.01"
+                                                onChange={(e) => handleMonetaryChange(index, e.target.value)}
+                                                onBlur={() => handleMonetaryBlur(index)}
                                             />
                                         </div>
 
@@ -239,17 +300,19 @@ export default function PortfolioEditor({ planId, initialPortfolio = [], onSave,
                                     {usage && (
                                         <div className={`mt-2 ${usage.isOverLimit ? 'text-error' : 'text-success'}`}>
                                             <div className="text-xs">
-                                                Account Usage: {formatCurrency(usage.total)} / {formatCurrency(usage.limit)}
-                                                ({usage.percentage.toFixed(1)}%)
+                                                Account Usage: {formatCurrency(usage.total)} / {usage.isUnlimited ? 'Unlimited' : formatCurrency(usage.limit)}
+                                                {!usage.isUnlimited && ` (${usage.percentage.toFixed(1)}%)`}
                                                 {usage.isOverLimit && (
                                                     <span className="font-bold ml-2">⚠️ Over limit!</span>
                                                 )}
                                             </div>
-                                            <progress
-                                                className={`progress w-full mt-1 ${usage.isOverLimit ? 'progress-error' : 'progress-success'}`}
-                                                value={usage.total}
-                                                max={usage.limit}
-                                            ></progress>
+                                            {!usage.isUnlimited && (
+                                                <progress
+                                                    className={`progress w-full mt-1 ${usage.isOverLimit ? 'progress-error' : 'progress-success'}`}
+                                                    value={usage.total}
+                                                    max={usage.limit}
+                                                ></progress>
+                                            )}
                                         </div>
                                     )}
 
@@ -280,7 +343,7 @@ export default function PortfolioEditor({ planId, initialPortfolio = [], onSave,
                         <div className="text-right">
                             <span className="text-lg font-semibold">
                                 Total: {formatCurrency(
-                                    holdings.reduce((sum, h) => sum + (parseFloat(h.monetary_value) || 0), 0)
+                                    holdings.reduce((sum, h) => sum + parseMonetaryValue(h.monetary_value), 0)
                                 )}
                             </span>
                         </div>
