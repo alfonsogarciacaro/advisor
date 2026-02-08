@@ -12,7 +12,7 @@ if [ -f "$SCRIPT_DIR/../.cloneid" ]; then
     fi
 fi
 
-export PORT=$((3000 + CLONE_ID))
+export PORT=$((8100 + CLONE_ID))
 export BACKEND_PORT=$((8000 + CLONE_ID))
 export NEXT_PUBLIC_API_URL="http://localhost:$BACKEND_PORT"
 

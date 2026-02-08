@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 from app.services.agent_service import AgentService
-from app.core.dependencies import get_agent_service, get_logger
+from app.core.dependencies import get_agent_service, get_logger, get_current_user
 from app.services.logger_service import LoggerService
+from app.models.auth import User
 
 router = APIRouter()
 
@@ -16,9 +17,10 @@ class AgentRunResponse(BaseModel):
 
 @router.post("/{agent_name}/run", response_model=AgentRunResponse)
 async def run_agent(
-    agent_name: str, 
+    agent_name: str,
     request: AgentRunRequest,
     background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
     agent_service: AgentService = Depends(get_agent_service),
     logger: LoggerService = Depends(get_logger)
 ):
@@ -41,6 +43,7 @@ async def run_agent(
 @router.get("/runs/{run_id}")
 async def get_run_status(
     run_id: str,
+    current_user: User = Depends(get_current_user),
     agent_service: AgentService = Depends(get_agent_service),
     logger: LoggerService = Depends(get_logger)
 ):
@@ -52,6 +55,7 @@ async def get_run_status(
 @router.get("/runs/{run_id}/logs")
 async def get_run_logs(
     run_id: str,
+    current_user: User = Depends(get_current_user),
     agent_service: AgentService = Depends(get_agent_service)
 ):
     logs = await agent_service.get_run_logs(run_id)

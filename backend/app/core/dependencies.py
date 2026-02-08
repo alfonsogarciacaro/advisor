@@ -34,9 +34,18 @@ def get_config_service(
 @lru_cache()
 def get_auth_service() -> AuthService:
     from app.services.auth.mock_user_provider import MockUserProvider
-    # In the future we can switch based on env var
-    user_provider = MockUserProvider() 
-    return JWTAuthService(user_provider)
+    from app.services.auth.storage_user_provider import StorageUserProvider
+
+    # Select provider based on AUTH_PROVIDER env var (default: mock for safety)
+    auth_provider = os.getenv("AUTH_PROVIDER", "mock")
+
+    if auth_provider == "storage":
+        user_provider = StorageUserProvider(get_storage_service())
+    else:
+        user_provider = MockUserProvider()
+
+    # We inject storage service to support token revocation
+    return JWTAuthService(user_provider, storage_service=get_storage_service())
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -49,6 +58,11 @@ async def get_current_user(
     )
     
     payload = auth_service.verify_token(token, credentials_exception)
+    
+    # Check if token is revoked (blacklist check)
+    if await auth_service.is_token_revoked(token):
+        raise credentials_exception
+
     username: str = payload.get("sub")
     if username is None:
         raise credentials_exception

@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="ETF Portfolio Advisor Backend", lifespan=lifespan)
 
 # CORS Configuration
-origins = os.getenv("CORS_ORIGINS", "*").split(",")
+origins = os.getenv("CORS_ORIGINS", "http://localhost:8100").split(",")
 
 app.add_middleware(
     CORSMiddleware,

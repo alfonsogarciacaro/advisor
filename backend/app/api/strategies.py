@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List, Dict, Any, Optional
 from app.services.config_service import ConfigService
-from app.core.dependencies import get_config_service, get_logger
+from app.core.dependencies import get_config_service, get_logger, get_current_user
 from app.services.logger_service import LoggerService
+from app.models.auth import User
 import yaml
 from pathlib import Path
 
@@ -32,6 +33,7 @@ def _load_strategies_config() -> Dict[str, Any]:
 @router.get("/strategies", response_model=List[Dict[str, Any]])
 async def list_strategies(
     risk_level: Optional[str] = Query(None, description="Filter by risk level (conservative, moderate, aggressive)"),
+    current_user: User = Depends(get_current_user),
     config_service: ConfigService = Depends(get_config_service),
     logger: LoggerService = Depends(get_logger)
 ):
@@ -52,6 +54,7 @@ async def list_strategies(
 @router.get("/strategies/{strategy_id}", response_model=Dict[str, Any])
 async def get_strategy(
     strategy_id: str,
+    current_user: User = Depends(get_current_user),
     logger: LoggerService = Depends(get_logger)
 ):
     """
@@ -69,6 +72,7 @@ async def get_strategy(
 
 @router.get("/config/tax-settings", response_model=Dict[str, Any])
 async def get_tax_settings(
+    current_user: User = Depends(get_current_user),
     logger: LoggerService = Depends(get_logger)
 ):
     """

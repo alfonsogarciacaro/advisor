@@ -2,30 +2,43 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // ==================== Authentication ====================
 
+// ==================== Authentication ====================
+
 let accessToken: string | null = null;
-let refreshToken: string | null = null;
+// No refresh token stored in JS - it's in HttpOnly cookie
 
-if (typeof window !== 'undefined') {
-    accessToken = localStorage.getItem('accessToken');
-    refreshToken = localStorage.getItem('refreshToken');
-}
-
-export function setAuth(access: string, refresh: string) {
+export function setAuth(access: string) {
     accessToken = access;
-    refreshToken = refresh;
-    if (typeof window !== 'undefined') {
-        localStorage.setItem('accessToken', access);
-        localStorage.setItem('refreshToken', refresh);
-    }
 }
 
-export function logout() {
-    accessToken = null;
-    refreshToken = null;
-    if (typeof window !== 'undefined') {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
+type UnauthorizedCallback = () => void;
+let onUnauthorizedCallback: UnauthorizedCallback | null = null;
+
+export function setOnUnauthorized(callback: UnauthorizedCallback) {
+    onUnauthorizedCallback = callback;
+}
+
+export async function logout() {
+    // Call backend to revoke token (cookie)
+    try {
+        await fetch(`${API_BASE_URL}/api/auth/logout`, {
+            method: 'POST',
+            // headers: Authorization is needed? backend says logout requires auth? 
+            // Yes, expects Depends(get_current_user).
+            headers: {
+                // 'Content-Type': 'application/json', // No body
+                'Authorization': accessToken ? `Bearer ${accessToken}` : ''
+            },
+            credentials: 'include', // Send cookies
+        });
+    } catch (e) {
+        console.error("Logout failed", e);
     }
+
+    accessToken = null;
+
+    // Trigger callback to update UI
+    if (onUnauthorizedCallback) onUnauthorizedCallback();
 }
 
 export function getAuthToken() {
@@ -44,16 +57,37 @@ export async function login(username: string, password: string): Promise<boolean
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
             body: formData,
+            credentials: 'include', // Receive cookies
         });
 
         if (response.ok) {
             const data = await response.json();
-            setAuth(data.access_token, data.refresh_token);
+            setAuth(data.access_token); // No refresh token in response body
             return true;
         }
         return false;
     } catch (error) {
         console.error('Login error:', error);
+        return false;
+    }
+}
+
+// Exposed function to trigger a refresh manually (e.g. on app load)
+export async function refreshToken(): Promise<boolean> {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include', // Send refresh cookie
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            setAuth(data.access_token);
+            return true;
+        }
+        return false;
+    } catch (error) {
         return false;
     }
 }
@@ -68,31 +102,27 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
     const authOptions = {
         ...options,
         headers,
+        credentials: 'include' as RequestCredentials, // Send cookies with every request
     };
 
     let response = await fetch(url, authOptions);
 
-    if (response.status === 401 && refreshToken) {
-        // Attempt to refresh token
+    if (response.status === 401) {
+        // Attempt to refresh token (cookie)
         try {
-            const refreshResponse = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ refresh_token: refreshToken }),
-            });
+            const success = await refreshToken();
 
-            if (refreshResponse.ok) {
-                const data = await refreshResponse.json();
-                setAuth(data.access_token, data.refresh_token);
-
+            if (success && accessToken) {
                 // Retry original request with new token
-                headers.set('Authorization', `Bearer ${data.access_token}`);
-                response = await fetch(url, { ...options, headers });
+                headers.set('Authorization', `Bearer ${accessToken}`);
+                response = await fetch(url, { ...options, headers, credentials: 'include' });
             } else {
-                logout();
+                // Refresh failed
+                // Only trigger unauthorized if we really can't refresh
+                if (onUnauthorizedCallback) onUnauthorizedCallback();
             }
         } catch (e) {
-            logout();
+            if (onUnauthorizedCallback) onUnauthorizedCallback();
         }
     }
 

@@ -37,6 +37,7 @@ def clear_test_data_collections():
         "optimization_jobs",  # Previous optimization results
         "llm_cache",          # LLM response cache
         "plans",              # Test plans
+        "users",              # Test users
     ]
 
     total_deleted = 0
