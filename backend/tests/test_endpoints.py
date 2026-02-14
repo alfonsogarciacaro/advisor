@@ -695,3 +695,169 @@ async def test_account_limits_in_etf_response(client, storage):
     assert nisa_growth["annual_limit"] > 0
     assert nisa_growth["used_space"] == 500000  # What we just added
     assert nisa_growth["available_space"] == nisa_growth["annual_limit"] - 500000
+
+
+# ==================== Authentication Tests ====================
+
+@pytest.fixture
+async def auth_client():
+    """Client without auth override - for testing actual auth flow"""
+    # Clear any existing auth overrides
+    app.dependency_overrides.clear()
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            yield ac
+    except Exception as e:
+        raise
+
+    # Cleanup
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_register_user(auth_client):
+    """Test user registration"""
+    # Register a new user
+    username = f"testuser_{uuid.uuid4().hex[:8]}"
+    payload = {
+        "username": username,
+        "password": "SecurePass123"
+    }
+
+    response = await auth_client.post("/api/auth/register", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["username"] == username
+    assert data["role"] == "user"
+    assert "hashed_password" not in data  # Password should not be returned
+
+
+@pytest.mark.asyncio
+async def test_register_weak_password(auth_client):
+    """Test registration rejects weak passwords"""
+    username = f"testuser_{uuid.uuid4().hex[:8]}"
+    payload = {
+        "username": username,
+        "password": "weak"  # Too short, no digit
+    }
+
+    response = await auth_client.post("/api/auth/register", json=payload)
+    assert response.status_code == 400
+    assert "password" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_register_duplicate_username(auth_client, storage):
+    """Test registration rejects duplicate username"""
+    username = f"testuser_{uuid.uuid4().hex[:8]}"
+
+    # First registration
+    payload = {
+        "username": username,
+        "password": "SecurePass123"
+    }
+    response1 = await auth_client.post("/api/auth/register", json=payload)
+    assert response1.status_code == 200
+
+    # Second registration with same username
+    response2 = await auth_client.post("/api/auth/register", json=payload)
+    assert response2.status_code == 409
+    assert "already exists" in response2.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_login_success(auth_client):
+    """Test successful login returns tokens"""
+    # First register a user
+    username = f"testuser_{uuid.uuid4().hex[:8]}"
+    await auth_client.post("/api/auth/register", json={
+        "username": username,
+        "password": "SecurePass123"
+    })
+
+    # Now login
+    response = await auth_client.post(
+        "/api/auth/token",
+        data={"username": username, "password": "SecurePass123"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
+    assert data["token_type"] == "bearer"
+
+
+@pytest.mark.asyncio
+async def test_login_wrong_password(auth_client):
+    """Test login fails with wrong password"""
+    username = f"testuser_{uuid.uuid4().hex[:8]}"
+    await auth_client.post("/api/auth/register", json={
+        "username": username,
+        "password": "SecurePass123"
+    })
+
+    # Login with wrong password
+    response = await auth_client.post(
+        "/api/auth/token",
+        data={"username": username, "password": "WrongPassword123"}
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_protected_endpoint_without_token(auth_client):
+    """Test that protected endpoints require authentication"""
+    response = await auth_client.get("/api/news")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_protected_endpoint_with_valid_token(auth_client):
+    """Test that valid token allows access to protected endpoints"""
+    # Register and login
+    username = f"testuser_{uuid.uuid4().hex[:8]}"
+    await auth_client.post("/api/auth/register", json={
+        "username": username,
+        "password": "SecurePass123"
+    })
+
+    login_response = await auth_client.post(
+        "/api/auth/token",
+        data={"username": username, "password": "SecurePass123"}
+    )
+    token = login_response.json()["access_token"]
+
+    # Access protected endpoint with token
+    response = await auth_client.get(
+        "/api/news",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_current_user(auth_client):
+    """Test /api/auth/me returns current user info"""
+    # Register and login
+    username = f"testuser_{uuid.uuid4().hex[:8]}"
+    await auth_client.post("/api/auth/register", json={
+        "username": username,
+        "password": "SecurePass123"
+    })
+
+    login_response = await auth_client.post(
+        "/api/auth/token",
+        data={"username": username, "password": "SecurePass123"}
+    )
+    token = login_response.json()["access_token"]
+
+    # Get current user
+    response = await auth_client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["username"] == username
+    assert data["role"] == "user"

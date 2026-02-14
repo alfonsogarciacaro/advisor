@@ -3,12 +3,13 @@ from typing import Dict, Optional, Any
 from app.services.portfolio_optimizer import PortfolioOptimizerService
 from app.services.history_service import HistoryService
 from app.services.currency_service import CurrencyService
-from app.core.dependencies import get_portfolio_optimizer_service, get_storage_service, get_logger, get_config_service, get_currency_service, get_history_service
+from app.core.dependencies import get_portfolio_optimizer_service, get_storage_service, get_logger, get_config_service, get_currency_service, get_history_service, get_current_user
 from app.services.storage_service import StorageService
 from app.services.logger_service import LoggerService
 from app.services.config_service import ConfigService
 from app.models.portfolio import OptimizationRequest, OptimizationResult, ValidationResult, ValidationError, PortfolioValidationRequest
 from app.core.utils import sanitize_numpy
+from app.models.auth import User
 
 router = APIRouter()
 
@@ -16,6 +17,7 @@ router = APIRouter()
 @router.post("/optimize", response_model=Dict[str, str])
 async def optimize_portfolio(
     request: OptimizationRequest,
+    current_user: User = Depends(get_current_user),
     optimizer_service: PortfolioOptimizerService = Depends(get_portfolio_optimizer_service),
     logger: LoggerService = Depends(get_logger)
 ):
@@ -52,6 +54,7 @@ async def optimize_portfolio(
 @router.get("/optimize/{job_id}", response_model=OptimizationResult)
 async def get_optimization_status(
     job_id: str,
+    current_user: User = Depends(get_current_user),
     storage_service: StorageService = Depends(get_storage_service),
     logger: LoggerService = Depends(get_logger)
 ):
@@ -68,6 +71,7 @@ async def get_optimization_status(
 @router.delete("/optimize/cache")
 async def clear_optimization_cache(
     job_id: Optional[str] = Query(None, description="Specific job ID to clear, or omit to clear all"),
+    current_user: User = Depends(get_current_user),
     storage_service: StorageService = Depends(get_storage_service),
     logger: LoggerService = Depends(get_logger)
 ):
@@ -91,6 +95,7 @@ async def clear_optimization_cache(
 @router.post("/validate", response_model=ValidationResult)
 async def validate_portfolio_holdings(
     request: PortfolioValidationRequest,
+    current_user: User = Depends(get_current_user),
     storage_service: StorageService = Depends(get_storage_service),
     config_service: ConfigService = Depends(get_config_service),
     logger: LoggerService = Depends(get_logger)
@@ -152,6 +157,7 @@ async def validate_portfolio_holdings(
 @router.get("/etfs/available")
 async def get_available_etfs(
     plan_id: str,
+    current_user: User = Depends(get_current_user),
     storage_service: StorageService = Depends(get_storage_service),
     config_service: ConfigService = Depends(get_config_service),
     currency_service: Any = Depends(get_currency_service),

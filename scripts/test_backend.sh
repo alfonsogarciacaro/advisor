@@ -13,6 +13,7 @@ fi
 
 export FAST_OPTIMIZE=true
 export ENABLE_YFINANCE=false
+export AUTH_PROVIDER=mock
 export FIRESTORE_EMULATOR_HOST=localhost:8080
 export BACKEND_PORT=$((8000 + CLONE_ID))
 export GCP_PROJECT_ID="test-project$([ "$CLONE_ID" -gt 0 ] && echo "-$CLONE_ID")"

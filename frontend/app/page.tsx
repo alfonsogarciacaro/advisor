@@ -6,9 +6,14 @@ import PlanManager from "../components/PlanManager";
 import PlanDetail from "../components/PlanDetail";
 import { Plan } from "../lib/api-client";
 
+import { UserMenu } from "../components/auth/UserMenu";
+import { useAuth } from "@/contexts/AuthContext";
+import { LogOut, User } from "lucide-react";
+
 export default function Home() {
     const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const { user, logout, isAuthenticated, setShowLoginModal } = useAuth();
 
     return (
         <div className="flex min-h-screen flex-col items-center bg-zinc-50 font-sans dark:bg-black">
@@ -26,29 +31,83 @@ export default function Home() {
                         </div>
                     </div>
 
-                    {/* Desktop Nav */}
-                    <nav className="hidden md:flex gap-6 text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                        <a href="#" className="hover:text-zinc-950 dark:hover:text-zinc-50">Plans</a>
-                        <a href="#" className="hover:text-zinc-950 dark:hover:text-zinc-50">Docs</a>
-                        <a href="#" className="hover:text-zinc-950 dark:hover:text-zinc-50">Settings</a>
-                    </nav>
+                    <div className="flex items-center gap-4">
+                        {/* Desktop Nav */}
+                        <nav className="hidden md:flex gap-6 text-sm font-medium text-zinc-600 dark:text-zinc-400">
+                            <a href="#" className="hover:text-zinc-950 dark:hover:text-zinc-50">Plans</a>
+                            <a href="#" className="hover:text-zinc-950 dark:hover:text-zinc-50">Docs</a>
+                            <a href="#" className="hover:text-zinc-950 dark:hover:text-zinc-50">Settings</a>
+                        </nav>
 
-                    {/* Mobile Hamburger */}
-                    <button
-                        className="md:hidden p-2 text-zinc-600 dark:text-zinc-400"
-                        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-                        </svg>
-                    </button>
+                        {/* User Menu (Desktop & Mobile if fits, otherwise handle in mobile menu?) 
+                            UserMenu component has hidden md:block for text, but icon is always visible.
+                            Let's show it always.
+                        */}
+                        <UserMenu />
+
+                        {/* Mobile Hamburger */}
+                        <button
+                            className="md:hidden p-2 text-zinc-600 dark:text-zinc-400"
+                            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                            </svg>
+                        </button>
+                    </div>
 
                     {/* Mobile Menu Dropdown */}
                     {isMobileMenuOpen && (
-                        <div className="absolute top-16 right-0 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl z-50 p-2 flex flex-col gap-2 md:hidden">
+                        <div className="absolute top-16 right-0 w-56 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl z-50 p-2 flex flex-col gap-2 md:hidden">
+                            {isAuthenticated && user ? (
+                                <div className="px-4 py-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-md mb-1">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300">
+                                            <User size={16} />
+                                        </div>
+                                        <div className="overflow-hidden">
+                                            <p className="text-sm font-medium text-zinc-900 dark:text-white truncate">
+                                                {user.username}
+                                            </p>
+                                            <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate capitalize">
+                                                {user.role} Account
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => {
+                                        setShowLoginModal(true);
+                                        setIsMobileMenuOpen(false);
+                                    }}
+                                    className="w-full text-left px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-md transition-colors"
+                                >
+                                    Sign In / Register
+                                </button>
+                            )}
+
+                            <div className="h-px bg-zinc-100 dark:bg-zinc-800 my-1" />
+
                             <a href="#" className="block px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md">Plans</a>
                             <a href="#" className="block px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md">Docs</a>
                             <a href="#" className="block px-4 py-2 text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md">Settings</a>
+
+                            {isAuthenticated && (
+                                <>
+                                    <div className="h-px bg-zinc-100 dark:bg-zinc-800 my-1" />
+                                    <button
+                                        onClick={() => {
+                                            logout();
+                                            setIsMobileMenuOpen(false);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-2 rounded-md transition-colors"
+                                    >
+                                        <LogOut size={16} />
+                                        Sign Out
+                                    </button>
+                                </>
+                            )}
                         </div>
                     )}
                 </header>

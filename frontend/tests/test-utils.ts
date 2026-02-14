@@ -1,11 +1,48 @@
 
 import { Page, expect } from '@playwright/test';
 
+export const loginUser = async (page: Page) => {
+    // Check if already logged in (UserMenu exists?)
+    // Or check if Sign In button exists
+    const signInBtn = page.getByRole('button', { name: 'Sign In' });
+
+    // If we are not on a page with header, we might miss it. 
+    // Usually createPlan ensures we are on home.
+
+    if (await signInBtn.isVisible()) {
+        await signInBtn.click();
+
+        // Wait for modal
+        await expect(page.getByRole('dialog')).toBeVisible();
+
+        // Switch to Sign Up
+        // "Don't have an account? Sign up" - "Sign up" is a button inside the text
+        await page.getByRole('button', { name: 'Sign up' }).click();
+
+        // Fill form
+        const username = `testuser_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+        await page.getByPlaceholder('Enter your username').fill(username);
+        await page.getByPlaceholder('Enter your password').fill('password123');
+        await page.getByPlaceholder('Confirm your password').fill('password123');
+
+        // Submit
+        await page.getByRole('button', { name: 'Create Account' }).click();
+
+        // Wait for modal to close or Sign In button to disappear
+        await expect(signInBtn).not.toBeVisible({ timeout: 15000 });
+    }
+};
+
 export const createPlan = async (page: Page, name: string) => {
     // If not already on home, go there
     if (page.url() === 'about:blank') {
         await page.goto('/');
     }
+
+    // Ensure we are logged in
+    await loginUser(page);
+
+    // Click "New Plan" or "Create Your First Plan"
 
     // Click "New Plan" or "Create Your First Plan"
     // Click "New Plan" or "Create Your First Plan"

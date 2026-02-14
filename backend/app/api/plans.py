@@ -6,8 +6,9 @@ from app.services.plan_service import PlanService
 from app.services.research_agent import ResearchAgent
 from app.models.plan import Plan
 from app.models.types import RiskProfile
-from app.core.dependencies import get_plan_service, get_logger, get_research_agent
+from app.core.dependencies import get_plan_service, get_logger, get_research_agent, get_current_user
 from app.services.logger_service import LoggerService
+from app.models.auth import User
 
 router = APIRouter()
 
@@ -44,6 +45,7 @@ class ResearchRequest(BaseModel):
 @router.post("/plans", response_model=Dict[str, str])
 async def create_plan(
     request: PlanCreateRequest,
+    current_user: User = Depends(get_current_user),
     plan_service: PlanService = Depends(get_plan_service),
     logger: LoggerService = Depends(get_logger)
 ):
@@ -74,6 +76,7 @@ async def create_plan(
 @router.get("/plans", response_model=List[Plan])
 async def list_plans(
     user_id: str = "default",
+    current_user: User = Depends(get_current_user),
     plan_service: PlanService = Depends(get_plan_service),
     logger: LoggerService = Depends(get_logger)
 ):
@@ -93,6 +96,7 @@ async def list_plans(
 @router.get("/plans/{plan_id}", response_model=Plan)
 async def get_plan(
     plan_id: str,
+    current_user: User = Depends(get_current_user),
     plan_service: PlanService = Depends(get_plan_service),
     logger: LoggerService = Depends(get_logger)
 ):
@@ -109,6 +113,7 @@ async def get_plan(
 async def update_plan(
     plan_id: str,
     request: PlanUpdateRequest,
+    current_user: User = Depends(get_current_user),
     plan_service: PlanService = Depends(get_plan_service),
     logger: LoggerService = Depends(get_logger)
 ):
@@ -137,6 +142,7 @@ async def update_plan(
 async def update_plan_portfolio(
     plan_id: str,
     request: PortfolioUpdateRequest,
+    current_user: User = Depends(get_current_user),
     plan_service: PlanService = Depends(get_plan_service),
     logger: LoggerService = Depends(get_logger)
 ):
@@ -164,6 +170,7 @@ async def update_plan_portfolio(
 async def delete_plan(
     plan_id: str,
     user_id: str = "default",
+    current_user: User = Depends(get_current_user),
     plan_service: PlanService = Depends(get_plan_service),
     logger: LoggerService = Depends(get_logger)
 ):
@@ -184,6 +191,7 @@ async def delete_plan(
 async def run_research_on_plan(
     plan_id: str,
     request: ResearchRequest,
+    current_user: User = Depends(get_current_user),
     plan_service: PlanService = Depends(get_plan_service),
     research_agent: ResearchAgent = Depends(get_research_agent),
     logger: LoggerService = Depends(get_logger)

@@ -14,6 +14,8 @@ fi
 export ENABLE_YFINANCE=true
 export FIRESTORE_EMULATOR_HOST=localhost:8080
 export BACKEND_PORT=$((8000 + CLONE_ID))
+export FRONTEND_PORT=$((8100 + CLONE_ID))
+export CORS_ORIGINS="http://localhost:$FRONTEND_PORT"
 export GCP_PROJECT_ID="finance-advisor$([ "$CLONE_ID" -gt 0 ] && echo "-$CLONE_ID")"
 
 echo "Starting backend dev server..."
