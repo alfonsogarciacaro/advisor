@@ -27,7 +27,7 @@ test.describe('View All Values in Base Currency', () => {
         // Wait for modal heading to be visible
         await expect(page.getByRole('heading', { name: /Edit Portfolio Holdings/i })).toBeVisible({ timeout: 10000 });
 
-        await page.getByRole('button', { name: /Add Asset/i }).click();
+        await page.getByRole('button', { name: '+ Add Asset' }).click();
 
         // The form should indicate JPY - wait for it to appear
         await expect(page.getByLabel(/Value \([A-Z]{3}\)/i)).toBeVisible({ timeout: 5000 });
@@ -51,7 +51,7 @@ test.describe('View All Values in Base Currency', () => {
         await expect(page.getByRole('heading', { name: /Edit Portfolio Holdings/i })).toBeVisible({ timeout: 10000 });
 
         // Click Add Asset to ensure form inputs are visible
-        await page.getByRole('button', { name: /Add Asset/i }).click();
+        await page.getByRole('button', { name: '+ Add Asset' }).click();
 
         // Should see value input with currency label
         await expect(page.getByLabel(/Value \([A-Z]{3}\)/i)).toBeVisible({ timeout: 5000 });
@@ -69,7 +69,7 @@ test.describe('View All Values in Base Currency', () => {
         await page.waitForSelector('.loading-spinner', { state: 'hidden', timeout: 10000 }).catch(() => { });
         await expect(page.getByRole('heading', { name: /Edit Portfolio Holdings/i })).toBeVisible({ timeout: 10000 });
 
-        await page.getByRole('button', { name: /Add Asset/i }).click();
+        await page.getByRole('button', { name: '+ Add Asset' }).click();
 
         // Open ETF dropdown - prices should show with ¥ symbol
         const etfSelect = page.getByLabel(/^ETF$/i).first();
@@ -89,7 +89,7 @@ test.describe('View All Values in Base Currency', () => {
         await page.waitForSelector('.loading-spinner', { state: 'hidden', timeout: 10000 }).catch(() => { });
         await expect(page.getByRole('heading', { name: /Edit Portfolio Holdings/i })).toBeVisible({ timeout: 10000 });
 
-        await page.getByRole('button', { name: /Add Asset/i }).click();
+        await page.getByRole('button', { name: '+ Add Asset' }).click();
 
         await page.getByLabel(/^ETF$/i).first().selectOption({ index: 1 });
         await page.getByLabel(/^Account$/i).first().selectOption('nisa_growth');
@@ -121,7 +121,7 @@ test.describe('View All Values in Base Currency', () => {
         await page.waitForSelector('.loading-spinner', { state: 'hidden', timeout: 10000 }).catch(() => { });
         await expect(page.getByRole('heading', { name: /Edit Portfolio Holdings/i })).toBeVisible({ timeout: 10000 });
 
-        await page.getByRole('button', { name: /Add Asset/i }).click();
+        await page.getByRole('button', { name: '+ Add Asset' }).click();
 
         await page.getByLabel(/^ETF$/i).first().selectOption({ index: 1 });
         await page.getByLabel(/^Account$/i).first().selectOption('nisa_growth');

@@ -36,8 +36,8 @@ test.describe('Register Existing Asset Holdings', () => {
 
     test('should show "Register Existing Assets" prompt for new plan', async ({ page }) => {
         // New plans without optimization or holdings should show prompt
-        await expect(page.getByText(/Do you have existing investments/i)).toBeVisible();
-        await expect(page.getByRole('button', { name: /Register Existing Assets/i })).toBeVisible();
+        await expect(page.getByText(/No assets registered yet/i)).toBeVisible();
+        await expect(page.getByRole('button', { name: /Add Assets/i })).toBeVisible();
     });
 
     test('should open portfolio editor modal when clicking Edit Portfolio', async ({ page }) => {
@@ -47,14 +47,14 @@ test.describe('Register Existing Asset Holdings', () => {
         await expect(page.getByRole('heading', { name: /Edit Portfolio Holdings/i })).toBeVisible();
 
         // Should have the add asset button
-        await expect(page.getByRole('button', { name: /Add Asset/i })).toBeVisible();
+        await expect(page.getByRole('button', { name: '+ Add Asset' })).toBeVisible();
     });
 
     test('should add a new asset holding', async ({ page }) => {
         await page.getByRole('button', { name: /Edit Portfolio/i }).click();
 
         // Add a new holding
-        await page.getByRole('button', { name: /Add Asset/i }).click();
+        await page.getByRole('button', { name: '+ Add Asset' }).click();
 
         // Should see a new holding row - use label text to find selects/inputs
         const etfSelect = page.getByLabel(/^ETF$/i).first();
@@ -82,7 +82,7 @@ test.describe('Register Existing Asset Holdings', () => {
     test('should display holdings grouped by account type', async ({ page }) => {
         // Add a holding first
         await page.getByRole('button', { name: /Edit Portfolio/i }).click();
-        await page.getByRole('button', { name: /Add Asset/i }).click();
+        await page.getByRole('button', { name: '+ Add Asset' }).click();
 
         // Add to NISA Growth
         await page.getByLabel(/^ETF$/i).first().selectOption({ index: 1 });
@@ -90,7 +90,7 @@ test.describe('Register Existing Asset Holdings', () => {
         await page.getByLabel(/Value \(JPY\)/i).first().fill('500000');
 
         // Add another asset to a different account
-        await page.getByRole('button', { name: /Add Asset/i }).click();
+        await page.getByRole('button', { name: '+ Add Asset' }).click();
         await page.getByLabel(/^ETF$/i).last().selectOption({ index: 2 });
         await page.getByLabel(/^Account$/i).last().selectOption('taxable');
         await page.getByLabel(/Value \(JPY\)/i).last().fill('300000');
@@ -107,7 +107,7 @@ test.describe('Register Existing Asset Holdings', () => {
 
     test('should show progress bar for account with limits', async ({ page }) => {
         await page.getByRole('button', { name: /Edit Portfolio/i }).click();
-        await page.getByRole('button', { name: /Add Asset/i }).click();
+        await page.getByRole('button', { name: '+ Add Asset' }).click();
 
         // Add to NISA Growth (has annual limit)
         await page.getByLabel(/^ETF$/i).first().selectOption({ index: 1 });
@@ -125,7 +125,7 @@ test.describe('Register Existing Asset Holdings', () => {
 
     test('should validate against account limits', async ({ page }) => {
         await page.getByRole('button', { name: /Edit Portfolio/i }).click();
-        await page.getByRole('button', { name: /Add Asset/i }).click();
+        await page.getByRole('button', { name: '+ Add Asset' }).click();
 
         // Try to add more than NISA Growth limit (¥1,800,000)
         await page.getByLabel(/^ETF$/i).first().selectOption({ index: 1 });
@@ -146,7 +146,7 @@ test.describe('Register Existing Asset Holdings', () => {
     test('should allow editing existing holdings', async ({ page }) => {
         // Add a holding first
         await page.getByRole('button', { name: /Edit Portfolio/i }).click();
-        await page.getByRole('button', { name: /Add Asset/i }).click();
+        await page.getByRole('button', { name: '+ Add Asset' }).click();
 
         await page.getByLabel(/^ETF$/i).first().selectOption({ index: 1 });
         await page.getByLabel(/^Account$/i).first().selectOption('nisa_growth');
@@ -158,7 +158,7 @@ test.describe('Register Existing Asset Holdings', () => {
 
         // Should see existing holding
         const valueInput = page.getByLabel(/Value \(JPY\)/i).first();
-        await expect(valueInput).toHaveValue('500000');
+        await expect(valueInput).toHaveValue('500,000');
 
         // Edit the value
         await valueInput.fill('750000');
@@ -166,13 +166,13 @@ test.describe('Register Existing Asset Holdings', () => {
 
         // Verify update - reopen to check
         await page.getByRole('button', { name: /Edit Portfolio/i }).click();
-        await expect(page.getByLabel(/Value \(JPY\)/i).first()).toHaveValue('750000');
+        await expect(page.getByLabel(/Value \(JPY\)/i).first()).toHaveValue('750,000');
     });
 
     test('should allow removing holdings', async ({ page }) => {
         // Add a holding first
         await page.getByRole('button', { name: /Edit Portfolio/i }).click();
-        await page.getByRole('button', { name: /Add Asset/i }).click();
+        await page.getByRole('button', { name: '+ Add Asset' }).click();
 
         await page.getByLabel(/^ETF$/i).first().selectOption({ index: 1 });
         await page.getByLabel(/^Account$/i).first().selectOption('nisa_growth');
@@ -198,7 +198,7 @@ test.describe('Register Existing Asset Holdings', () => {
     test('should cancel without saving changes', async ({ page }) => {
         // Add a holding first
         await page.getByRole('button', { name: /Edit Portfolio/i }).click();
-        await page.getByRole('button', { name: /Add Asset/i }).click();
+        await page.getByRole('button', { name: '+ Add Asset' }).click();
 
         await page.getByLabel(/^ETF$/i).first().selectOption({ index: 1 });
         await page.getByLabel(/^Account$/i).first().selectOption('nisa_growth');
@@ -210,20 +210,20 @@ test.describe('Register Existing Asset Holdings', () => {
         // Modal should close
         await expect(page.getByRole('heading', { name: /Edit Portfolio Holdings/i })).not.toBeVisible();
 
-        // Should not see holdings
-        await expect(page.getByText(/Current Holdings/i)).not.toBeVisible();
+        // Should not see holdings (still empty)
+        await expect(page.getByText(/No assets registered yet/i)).toBeVisible();
     });
 
     test('should show total value across all accounts', async ({ page }) => {
         await page.getByRole('button', { name: /Edit Portfolio/i }).click();
 
         // Add multiple holdings
-        await page.getByRole('button', { name: /Add Asset/i }).click();
+        await page.getByRole('button', { name: '+ Add Asset' }).click();
         await page.getByLabel(/^ETF$/i).first().selectOption({ index: 1 });
         await page.getByLabel(/^Account$/i).first().selectOption('nisa_growth');
         await page.getByLabel(/Value \(JPY\)/i).first().fill('500000');
 
-        await page.getByRole('button', { name: /Add Asset/i }).click();
+        await page.getByRole('button', { name: '+ Add Asset' }).click();
         await page.getByLabel(/^ETF$/i).last().selectOption({ index: 2 });
         await page.getByLabel(/^Account$/i).last().selectOption('taxable');
         await page.getByLabel(/Value \(JPY\)/i).last().fill('300000');

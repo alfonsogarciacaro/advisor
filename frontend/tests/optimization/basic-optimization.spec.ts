@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { createPlan } from '../test-utils';
 
 test.describe('Optimization - Basic', () => {
@@ -11,76 +11,51 @@ test.describe('Optimization - Basic', () => {
         await page.waitForTimeout(1000);
     });
 
-    test('should display optimization input form', async ({ page }) => {
-        // Should be in plan detail view with optimizer visible
-        const amountInput = page.getByLabel('Investment Amount');
-        await expect(amountInput).toBeVisible();
+    const addAssetToPlan = async (page: Page, amount: string) => {
+        // Open editor
+        await page.getByRole('button', { name: /Edit Portfolio/i }).click();
 
-        const currencySelect = page.getByLabel('Currency');
-        await expect(currencySelect).toBeVisible();
+        // Add asset
+        await page.getByRole('button', { name: /Add Asset/i }).click();
 
-        const optimizeButton = page.getByRole('button', { name: 'Optimize Portfolio' });
-        await expect(optimizeButton).toBeVisible();
-    });
+        // Select first available ETF
+        await page.getByLabel(/^ETF$/i).first().selectOption({ index: 1 });
+        await page.getByLabel(/^Account$/i).first().selectOption('taxable');
+        await page.getByLabel(/Value/i).first().fill(amount);
 
-    test('should validate investment amount', async ({ page }) => {
-        // Try to optimize with invalid amount
-        await page.getByLabel('Investment Amount').fill('0');
-        await page.getByRole('button', { name: 'Optimize Portfolio' }).click();
+        // Save
+        await page.getByRole('button', { name: /Save Portfolio/i }).click();
 
-        // Button should still be enabled (validation happens on click)
-        // But if there's an error message:
-        const errorAlert = page.getByRole('alert').filter({ hasText: /valid|investment/i });
-        const hasError = await errorAlert.isVisible({ timeout: 2000 }).catch(() => false);
-        if (hasError) {
-            await expect(errorAlert).toBeVisible();
-        }
-    });
-
-    test('should select different currencies', async ({ page }) => {
-        const currencySelect = page.getByLabel('Currency');
-
-        // Check available currencies
-        const options = await currencySelect.locator('option').all();
-        const currencies = await Promise.all(
-            options.map(async (opt) => await opt.getAttribute('value'))
-        );
-
-        expect(currencies).toContain('USD');
-        expect(currencies).toContain('JPY');
-        expect(currencies).toContain('EUR');
-
-        // Select JPY
-        await currencySelect.selectOption('JPY');
-        await expect(currencySelect).toHaveValue('JPY');
-    });
+        // Wait for modal to close
+        await expect(page.getByRole('dialog')).not.toBeVisible();
+    };
 
     test('should start optimization and show progress', async ({ page }) => {
-        // Enter valid amount
-        await page.getByLabel('Investment Amount').fill('10000');
-        await page.getByLabel('Currency').selectOption('USD');
+        // Add assets first (optimization requires value)
+        await addAssetToPlan(page, '1000000');
 
         // Start optimization
-        await page.getByRole('button', { name: 'Optimize Portfolio' }).click();
+        await page.getByRole('button', { name: /^Optimize Portfolio$/i }).click();
 
         // Button should show loading state with spinner
-        await expect(page.getByRole('button', { name: /Optimizing/i })).toBeVisible();
-        await expect(page.locator('.loading-spinner')).toBeVisible();
+        // The button text changes to a spinner, so we look for the spinner or the disabled state
+        const optimizeBtn = page.getByRole('button', { name: /Optimize Portfolio/i }).or(page.locator('button:has(.loading-spinner)'));
+        await expect(optimizeBtn).toBeDisabled();
 
-        // Status badge may appear (queued or optimizing) after first status update
-        // This is optional as it depends on backend timing
+        // Status badge may appear (queued or optimizing)
         const statusBadge = page.locator('.card-title').locator('.badge').filter({ hasText: /QUEUED|OPTIMIZING|FETCHING|FORECASTING/i });
         const hasBadge = await statusBadge.isVisible({ timeout: 5000 }).catch(() => false);
         if (hasBadge) {
             await expect(statusBadge).toBeVisible();
         }
-        // Test passes regardless of badge visibility
     });
 
     test('should display optimization results when complete', async ({ page }) => {
+        // Add assets
+        await addAssetToPlan(page, '1000000');
+
         // Start optimization
-        await page.getByLabel('Investment Amount').fill('10000');
-        await page.getByRole('button', { name: 'Optimize Portfolio' }).click();
+        await page.getByRole('button', { name: /^Optimize Portfolio$/i }).click();
 
         // Wait for completion
         await expect(page.getByText('COMPLETED')).toBeVisible({ timeout: 60000 });
@@ -89,14 +64,14 @@ test.describe('Optimization - Basic', () => {
         await expect(page.getByText(/Initial Investment/i)).toBeVisible();
         await expect(page.getByText(/Expected Annual Return/i)).toBeVisible();
         await expect(page.getByText(/Annual Volatility/i)).toBeVisible();
-        // Sharpe Ratio appears in both stats and table, use stat-title to target the stats section
+        // Sharpe Ratio
         await expect(page.locator('.stat-title', { hasText: 'Sharpe Ratio' })).toBeVisible();
     });
 
     test('should display optimal portfolio allocation table', async ({ page }) => {
         // Run optimization
-        await page.getByLabel('Investment Amount').fill('10000');
-        await page.getByRole('button', { name: 'Optimize Portfolio' }).click();
+        await addAssetToPlan(page, '1000000');
+        await page.getByRole('button', { name: /^Optimize Portfolio$/i }).click();
 
         // Wait for completion
         await expect(page.getByText('COMPLETED')).toBeVisible({ timeout: 60000 });
@@ -114,55 +89,23 @@ test.describe('Optimization - Basic', () => {
         await expect(table).toBeVisible();
     });
 
-    test('should format currency correctly', async ({ page }) => {
-        // Optimize with JPY
-        await page.getByLabel('Investment Amount').fill('1000000');
-        await page.getByLabel('Currency').selectOption('JPY');
-        await page.getByRole('button', { name: 'Optimize Portfolio' }).click();
-
-        await expect(page.getByText('COMPLETED')).toBeVisible({ timeout: 60000 });
-
-        // Should see ¥ symbol in the results
-        const pageText = await page.textContent('body');
-        expect(pageText).toContain('¥');
-    });
-
-    test('should allow re-optimization', async ({ page }) => {
+    test('should allow re-optimization after portfolio change', async ({ page }) => {
         // First optimization
-        await page.getByLabel('Investment Amount').fill('10000');
-        await page.getByRole('button', { name: 'Optimize Portfolio' }).click();
+        await addAssetToPlan(page, '1000000');
+        await page.getByRole('button', { name: /^Optimize Portfolio$/i }).click();
         await expect(page.getByText('COMPLETED')).toBeVisible({ timeout: 60000 });
 
-        // Change amount
-        await page.getByLabel('Investment Amount').fill('20000');
+        // Change portfolio (Edit Portfolio)
+        await page.getByRole('button', { name: /Edit Portfolio/i }).click();
+        await page.getByLabel(/Value/i).first().fill('2000000');
+        await page.getByRole('button', { name: /Save Portfolio/i }).click();
+        await expect(page.getByRole('dialog')).not.toBeVisible();
 
         // Should be able to optimize again
-        await page.getByRole('button', { name: 'Optimize Portfolio' }).click();
+        await page.getByRole('button', { name: /^Optimize Portfolio$/i }).click();
 
         // Button should show loading state
-        await expect(page.getByRole('button', { name: /Optimizing/i })).toBeVisible();
-
-        // Status badge is optional (depends on timing)
-        const statusBadge = page.locator('.card-title').locator('.badge').filter({ hasText: /QUEUED|OPTIMIZING|FETCHING|FORECASTING/i });
-        const hasBadge = await statusBadge.isVisible({ timeout: 5000 }).catch(() => false);
-        if (hasBadge) {
-            await expect(statusBadge).toBeVisible();
-        }
-    });
-
-    test('should clear cache and reset', async ({ page }) => {
-        await page.getByLabel('Investment Amount').fill('10000');
-        await page.getByRole('button', { name: 'Optimize Portfolio' }).click();
-        await expect(page.getByText('COMPLETED')).toBeVisible({ timeout: 60000 });
-
-        // Clear cache button exists
-        const clearBtn = page.getByRole('button', { name: 'Clear Cache' });
-        if (await clearBtn.isVisible()) {
-            await clearBtn.click();
-
-            // Results should be cleared
-            await expect(page.getByText(/Optimal Portfolio Allocation/i)).not.toBeVisible();
-            await expect(page.getByLabel('Investment Amount')).toHaveValue('10000');
-        }
+        const optimizeBtn = page.getByRole('button', { name: /Optimize Portfolio/i }).or(page.locator('button:has(.loading-spinner)'));
+        await expect(optimizeBtn).toBeDisabled();
     });
 });

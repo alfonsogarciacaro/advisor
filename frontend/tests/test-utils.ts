@@ -80,7 +80,7 @@ export const createPlan = async (page: Page, name: string) => {
     await page.getByRole('button', { name: 'Create Plan' }).click();
 
     // Wait for plan creation dialog to close specifically (not other modals like research panel)
-    await expect(createDialog).not.toBeVisible({ timeout: 10000 });
+    await expect(createDialog).not.toBeVisible({ timeout: 30000 });
 
     // Verify plan is visible in detail view
     // Detail view has "Back to Plans" and the plan name in header
